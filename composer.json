@@ -1,0 +1,17 @@
+{
+    "name": "biz-data/crawlers",
+    "description": "Business Data Crawlers with Goutte",
+    "require": {
+        "fabpot/goutte": "^4.0",
+        "guzzlehttp/guzzle": "^7.0",
+        "monolog/monolog": "^2.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "BizData\\Crawlers\\": "crawlers/"
+        }
+    }
+}
