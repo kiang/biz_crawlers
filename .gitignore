@@ -1,0 +1,21 @@
+# Vendor directory
+/vendor/
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Data repository (separate git repo)
+/data/
