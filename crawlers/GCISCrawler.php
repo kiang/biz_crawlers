@@ -16,6 +16,8 @@ class GCISCrawler extends BaseCrawler
         'D' => '解散'
     ];
     private array $processedReports = [];
+    private array $processedPdfs = [];
+    private array $processedFilenames = [];
     
     public function crawl(array $params = []): array
     {
@@ -30,6 +32,9 @@ class GCISCrawler extends BaseCrawler
         $rocYear = $this->convertToRocYear($year);
         
         $this->logger->info("Starting GCIS crawl for ROC {$rocYear}-{$month} (Western {$year}-{$month})");
+        
+        // Load processed PDFs to avoid duplicates
+        $this->loadProcessedPdfs();
         
         // First get the organizations list
         $this->fetchOrganizations();
@@ -66,6 +71,9 @@ class GCISCrawler extends BaseCrawler
                 $this->saveDataToRepository('gcis', 'companies', $category, $rocYear, $month, $ids);
             }
         }
+        
+        // Save processed PDFs tracking
+        $this->saveProcessedPdfs();
         
         $uniqueIds = array_unique($allIds);
         $this->logger->info("Total unique company IDs found: " . count($uniqueIds));
@@ -106,6 +114,12 @@ class GCISCrawler extends BaseCrawler
         $yearMonth = sprintf("%03d%02d", $year, $month);
         $fileName = "{$yearMonth}{$orgId}{$typeId}.pdf";
         
+        // Check for duplicate based on filename BEFORE any download
+        if ($this->isFilenameAlreadyProcessed($fileName)) {
+            $this->logger->info("PDF {$fileName} already processed, loading existing data");
+            return $this->loadExistingPdfDataByFilename($fileName);
+        }
+        
         // Check if we already downloaded this specific report
         $reportKey = "{$orgId}_{$typeId}_{$year}_{$month}";
         if ($this->isReportProcessed($reportKey)) {
@@ -124,7 +138,17 @@ class GCISCrawler extends BaseCrawler
             $this->logger->info("Downloading PDF: {$fileName}");
             $pdfFile = $this->downloadFile($url);
             
+            // Generate unique ID for this PDF
+            $uniqueId = $this->generateUniqueIdForPdf($pdfFile, $fileName);
+            
             $ids = $this->extractIdsFromPdf($pdfFile);
+            
+            // Save individual PDF results with unique ID
+            $this->savePdfData($uniqueId, $fileName, $ids, ['org' => $orgId, 'type' => $typeId, 'year' => $year, 'month' => $month]);
+            
+            // Mark PDF as processed
+            $this->markPdfProcessed($uniqueId, $fileName);
+            $this->markFilenameProcessed($fileName);
             
             // Clean up temporary file
             if (file_exists($pdfFile)) {
@@ -186,6 +210,9 @@ class GCISCrawler extends BaseCrawler
         
         $this->logger->info("Starting GCIS business crawl for ROC {$rocYear}-{$month} (Western {$year}-{$month})");
         
+        // Load processed PDFs to avoid duplicates
+        $this->loadProcessedPdfs();
+        
         // Get business organizations from different URL
         $businessUrl = 'https://serv.gcis.nat.gov.tw/moeadsBF/bms/report.jsp';
         $crawler = $this->fetch($businessUrl);
@@ -225,6 +252,9 @@ class GCISCrawler extends BaseCrawler
             }
         }
         
+        // Save processed PDFs tracking
+        $this->saveProcessedPdfs();
+        
         $uniqueIds = array_unique($allIds);
         $this->logger->info("Total unique business IDs found: " . count($uniqueIds));
         
@@ -250,6 +280,12 @@ class GCISCrawler extends BaseCrawler
         $yearMonth = sprintf("%03d%02d", $year, $month);
         $fileName = "{$orgId}{$typeId}{$yearMonth}.pdf";
         
+        // Check for duplicate based on filename BEFORE any download
+        if ($this->isFilenameAlreadyProcessed($fileName)) {
+            $this->logger->info("Business PDF {$fileName} already processed, loading existing data");
+            return $this->loadExistingPdfDataByFilename($fileName);
+        }
+        
         $url = "https://serv.gcis.nat.gov.tw/moeadsBF/cmpy/reportAction.do?" . http_build_query([
             'method' => 'report',
             'reportClass' => 'bms',
@@ -261,7 +297,26 @@ class GCISCrawler extends BaseCrawler
             $this->logger->info("Downloading business PDF: {$fileName}");
             $pdfFile = $this->downloadFile($url);
             
+            // Generate unique ID for this PDF
+            $uniqueId = $this->generateUniqueIdForPdf($pdfFile, $fileName);
+            
+            // Check for duplicate based on filename before processing
+            if ($this->isFilenameAlreadyProcessed($fileName)) {
+                $this->logger->info("Business PDF {$fileName} already processed, loading existing data");
+                if (file_exists($pdfFile)) {
+                    unlink($pdfFile);
+                }
+                return $this->loadExistingPdfDataByFilename($fileName);
+            }
+            
             $ids = $this->extractIdsFromPdf($pdfFile);
+            
+            // Save individual PDF results with unique ID
+            $this->savePdfData($uniqueId, $fileName, $ids, ['org' => $orgId, 'type' => $typeId, 'year' => $year, 'month' => $month, 'business_type' => true]);
+            
+            // Mark PDF as processed
+            $this->markPdfProcessed($uniqueId, $fileName);
+            $this->markFilenameProcessed($fileName);
             
             // Clean up temporary file
             if (file_exists($pdfFile)) {
@@ -328,5 +383,106 @@ class GCISCrawler extends BaseCrawler
     private function markReportProcessed(string $reportKey): void
     {
         $this->processedReports[] = $reportKey;
+    }
+    
+    private function generateUniqueIdForPdf(string $pdfFile, string $fileName): string
+    {
+        $fileHash = hash_file('sha256', $pdfFile);
+        $shortHash = substr($fileHash, 0, 8);
+        $timestamp = date('Ymd_His');
+        $baseName = pathinfo($fileName, PATHINFO_FILENAME);
+        
+        return "{$baseName}_{$timestamp}_{$shortHash}";
+    }
+    
+    private function isFilenameAlreadyProcessed(string $fileName): bool
+    {
+        return in_array($fileName, $this->processedFilenames);
+    }
+    
+    private function markPdfProcessed(string $uniqueId, string $fileName): void
+    {
+        $this->processedPdfs[$uniqueId] = [
+            'filename' => $fileName,
+            'processed_at' => date('c')
+        ];
+    }
+    
+    private function markFilenameProcessed(string $fileName): void
+    {
+        if (!in_array($fileName, $this->processedFilenames)) {
+            $this->processedFilenames[] = $fileName;
+        }
+    }
+    
+    private function savePdfData(string $uniqueId, string $fileName, array $ids, array $metadata): void
+    {
+        $dataDir = dirname(__DIR__) . '/data/gcis/pdfs';
+        if (!is_dir($dataDir)) {
+            mkdir($dataDir, 0755, true);
+        }
+        
+        $filePath = "{$dataDir}/{$uniqueId}.txt";
+        file_put_contents($filePath, implode("\n", $ids));
+        
+        $this->logger->info("Saved " . count($ids) . " IDs from {$fileName} to {$uniqueId}.txt");
+        
+        // Also save metadata
+        $metadataFile = "{$dataDir}/{$uniqueId}_metadata.json";
+        $metadataContent = [
+            'unique_id' => $uniqueId,
+            'original_filename' => $fileName,
+            'processed_at' => date('c'),
+            'ids_count' => count($ids),
+            'metadata' => $metadata
+        ];
+        file_put_contents($metadataFile, json_encode($metadataContent, JSON_PRETTY_PRINT));
+    }
+    
+    private function loadExistingPdfDataByFilename(string $fileName): array
+    {
+        $dataDir = dirname(__DIR__) . '/data/gcis/pdfs';
+        
+        // Look for existing file with same filename
+        foreach ($this->processedPdfs as $existingId => $data) {
+            if ($data['filename'] === $fileName) {
+                $filePath = "{$dataDir}/{$existingId}.txt";
+                if (file_exists($filePath)) {
+                    $content = file_get_contents($filePath);
+                    return array_filter(explode("\n", $content));
+                }
+            }
+        }
+        
+        return [];
+    }
+    
+    private function loadProcessedPdfs(): void
+    {
+        $trackingFile = dirname(__DIR__) . '/data/gcis/processed_pdfs.json';
+        
+        if (file_exists($trackingFile)) {
+            $data = json_decode(file_get_contents($trackingFile), true);
+            $this->processedPdfs = $data ?: [];
+            
+            // Build filename array for quick lookup
+            $this->processedFilenames = [];
+            foreach ($this->processedPdfs as $uniqueId => $data) {
+                if (!in_array($data['filename'], $this->processedFilenames)) {
+                    $this->processedFilenames[] = $data['filename'];
+                }
+            }
+        }
+    }
+    
+    private function saveProcessedPdfs(): void
+    {
+        $dataDir = dirname(__DIR__) . '/data/gcis';
+        if (!is_dir($dataDir)) {
+            mkdir($dataDir, 0755, true);
+        }
+        
+        $trackingFile = "{$dataDir}/processed_pdfs.json";
+        file_put_contents($trackingFile, json_encode($this->processedPdfs, JSON_PRETTY_PRINT));
     }
 }
