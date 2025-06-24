@@ -109,7 +109,12 @@ abstract class BaseCrawler
                     sleep($this->config['delay']);
                 }
                 
-                $httpClient = $this->client->getHttpClient();
+                $httpClient = HttpClient::create([
+                    'timeout' => $this->config['timeout'],
+                    'headers' => [
+                        'User-Agent' => $this->config['user_agent']
+                    ]
+                ]);
                 $response = $httpClient->request('GET', $url);
                 file_put_contents($destination, $response->getContent());
                 
