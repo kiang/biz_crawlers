@@ -25,7 +25,10 @@ class GCISCrawler extends BaseCrawler
             throw new \InvalidArgumentException('Year and month parameters are required');
         }
         
-        $this->logger->info("Starting GCIS crawl for {$year}-{$month}");
+        // Convert Western calendar year to Taiwan ROC year if needed
+        $rocYear = $this->convertToRocYear($year);
+        
+        $this->logger->info("Starting GCIS crawl for ROC {$rocYear}-{$month} (Western {$year}-{$month})");
         
         // First get the organizations list
         $this->fetchOrganizations();
@@ -34,7 +37,7 @@ class GCISCrawler extends BaseCrawler
         $allIds = [];
         foreach ($this->organizations as $orgId => $orgName) {
             foreach ($this->types as $typeId => $typeName) {
-                $ids = $this->crawlReportType($year, $month, $orgId, $typeId);
+                $ids = $this->crawlReportType($rocYear, $month, $orgId, $typeId);
                 $allIds = array_merge($allIds, $ids);
                 
                 $this->logger->info("Found " . count($ids) . " IDs for {$orgName}-{$typeName}");
@@ -145,7 +148,10 @@ class GCISCrawler extends BaseCrawler
     
     public function crawlBusiness(int $year, int $month): array
     {
-        $this->logger->info("Starting GCIS business crawl for {$year}-{$month}");
+        // Convert Western calendar year to Taiwan ROC year if needed
+        $rocYear = $this->convertToRocYear($year);
+        
+        $this->logger->info("Starting GCIS business crawl for ROC {$rocYear}-{$month} (Western {$year}-{$month})");
         
         // Get business organizations from different URL
         $businessUrl = 'https://serv.gcis.nat.gov.tw/moeadsBF/bms/report.jsp';
@@ -179,7 +185,7 @@ class GCISCrawler extends BaseCrawler
         $allIds = [];
         foreach ($organizations as $orgId => $orgName) {
             foreach ($businessTypes as $typeId => $typeName) {
-                $ids = $this->crawlBusinessReportType($year, $month, $orgId, $typeId);
+                $ids = $this->crawlBusinessReportType($rocYear, $month, $orgId, $typeId);
                 $allIds = array_merge($allIds, $ids);
                 
                 $this->logger->info("Found " . count($ids) . " business IDs for {$orgName}-{$typeName}");
@@ -221,5 +227,44 @@ class GCISCrawler extends BaseCrawler
             $this->logger->warning("Failed to process business {$fileName}: " . $e->getMessage());
             return [];
         }
+    }
+    
+    /**
+     * Convert Western calendar year to Taiwan ROC year
+     * Provides helpful error messages for common mistakes
+     */
+    private function convertToRocYear(int $year): int
+    {
+        // If year is already in ROC format (reasonable range: 100-150)
+        if ($year >= 100 && $year <= 150) {
+            return $year;
+        }
+        
+        // If year is in Western format (2000+), convert to ROC
+        if ($year >= 2000) {
+            $rocYear = $year - 1911;
+            $this->logger->info("Converted Western year {$year} to ROC year {$rocYear}");
+            return $rocYear;
+        }
+        
+        // If year seems incorrect, provide helpful error
+        if ($year < 100) {
+            throw new \InvalidArgumentException(
+                "Year {$year} seems too small. Please use either:\n" .
+                "- ROC calendar year (e.g., 114 for 2025)\n" .
+                "- Western calendar year (e.g., 2025, will be converted to ROC 114)"
+            );
+        }
+        
+        if ($year > 1911 && $year < 2000) {
+            throw new \InvalidArgumentException(
+                "Year {$year} is ambiguous. Please use either:\n" .
+                "- ROC calendar year (e.g., 114 for 2025)\n" .
+                "- Western calendar year (e.g., 2025, will be converted to ROC 114)"
+            );
+        }
+        
+        // Fallback - assume it's already ROC year
+        return $year;
     }
 }
