@@ -109,13 +109,9 @@ abstract class BaseCrawler
                     sleep($this->config['delay']);
                 }
                 
-                $httpClient = HttpClient::create([
-                    'timeout' => $this->config['timeout'],
-                    'headers' => [
-                        'User-Agent' => $this->config['user_agent']
-                    ]
-                ]);
-                $response = $httpClient->request('GET', $url);
+                // Use the same client to maintain session cookies
+                $crawler = $this->client->request('GET', $url);
+                $response = $this->client->getResponse();
                 file_put_contents($destination, $response->getContent());
                 
                 $this->logger->info("Successfully downloaded: {$url} to {$destination}");
