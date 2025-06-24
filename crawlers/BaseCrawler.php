@@ -168,5 +168,85 @@ abstract class BaseCrawler
         return $results;
     }
     
+    protected function saveDataToRepository(string $source, string $type, string $category, int $year, int $month, array $ids): string
+    {
+        $dataDir = dirname(__DIR__) . '/data';
+        $sourceDir = "{$dataDir}/{$source}";
+        
+        if ($type) {
+            $sourceDir .= "/{$type}";
+        }
+        
+        $yearMonthDir = sprintf("%s/%03d-%02d", $sourceDir, $year, $month);
+        
+        if (!is_dir($yearMonthDir)) {
+            mkdir($yearMonthDir, 0755, true);
+        }
+        
+        $filename = "{$category}.json";
+        $filepath = "{$yearMonthDir}/{$filename}";
+        
+        $data = [
+            'metadata' => [
+                'source' => $source,
+                'type' => $type,
+                'category' => $category,
+                'year' => $year,
+                'month' => $month,
+                'crawled_at' => date('c'),
+                'total_records' => count($ids)
+            ],
+            'data' => array_map(function($id) {
+                return ['id' => $id];
+            }, array_values(array_unique($ids)))
+        ];
+        
+        file_put_contents($filepath, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        $this->logger->info("Saved " . count($ids) . " records to {$filepath}");
+        
+        return $filepath;
+    }
+    
+    protected function checkReportExists(string $source, string $type, string $category, int $year, int $month): bool
+    {
+        $dataDir = dirname(__DIR__) . '/data';
+        $sourceDir = "{$dataDir}/{$source}";
+        
+        if ($type) {
+            $sourceDir .= "/{$type}";
+        }
+        
+        $yearMonthDir = sprintf("%s/%03d-%02d", $sourceDir, $year, $month);
+        $filename = "{$category}.json";
+        $filepath = "{$yearMonthDir}/{$filename}";
+        
+        return file_exists($filepath);
+    }
+    
+    protected function loadExistingData(string $source, string $type, string $category, int $year, int $month): array
+    {
+        $dataDir = dirname(__DIR__) . '/data';
+        $sourceDir = "{$dataDir}/{$source}";
+        
+        if ($type) {
+            $sourceDir .= "/{$type}";
+        }
+        
+        $yearMonthDir = sprintf("%s/%03d-%02d", $sourceDir, $year, $month);
+        $filename = "{$category}.json";
+        $filepath = "{$yearMonthDir}/{$filename}";
+        
+        if (!file_exists($filepath)) {
+            return [];
+        }
+        
+        $data = json_decode(file_get_contents($filepath), true);
+        if (!$data || !isset($data['data'])) {
+            return [];
+        }
+        
+        return array_column($data['data'], 'id');
+    }
+    
     abstract public function crawl(array $params = []): array;
 }

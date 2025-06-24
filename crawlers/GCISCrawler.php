@@ -15,6 +15,7 @@ class GCISCrawler extends BaseCrawler
         'C' => '變更', 
         'D' => '解散'
     ];
+    private array $processedReports = [];
     
     public function crawl(array $params = []): array
     {
@@ -35,12 +36,34 @@ class GCISCrawler extends BaseCrawler
         
         // Then crawl each organization and type combination
         $allIds = [];
+        $typeResults = []; // Store results by type to save consolidated data
+        
         foreach ($this->organizations as $orgId => $orgName) {
             foreach ($this->types as $typeId => $typeName) {
                 $ids = $this->crawlReportType($rocYear, $month, $orgId, $typeId);
                 $allIds = array_merge($allIds, $ids);
                 
+                // Collect IDs by type for consolidated saving
+                $categoryMap = [
+                    'S' => 'establishments',
+                    'C' => 'changes',
+                    'D' => 'dissolutions'
+                ];
+                $category = $categoryMap[$typeId] ?? $typeId;
+                
+                if (!isset($typeResults[$category])) {
+                    $typeResults[$category] = [];
+                }
+                $typeResults[$category] = array_merge($typeResults[$category], $ids);
+                
                 $this->logger->info("Found " . count($ids) . " IDs for {$orgName}-{$typeName}");
+            }
+        }
+        
+        // Save consolidated data by type
+        foreach ($typeResults as $category => $ids) {
+            if (!empty($ids)) {
+                $this->saveDataToRepository('gcis', 'companies', $category, $rocYear, $month, $ids);
             }
         }
         
@@ -83,6 +106,13 @@ class GCISCrawler extends BaseCrawler
         $yearMonth = sprintf("%03d%02d", $year, $month);
         $fileName = "{$yearMonth}{$orgId}{$typeId}.pdf";
         
+        // Check if we already downloaded this specific report
+        $reportKey = "{$orgId}_{$typeId}_{$year}_{$month}";
+        if ($this->isReportProcessed($reportKey)) {
+            $this->logger->info("Report {$fileName} already processed, skipping");
+            return [];
+        }
+        
         $url = self::REPORT_URL . "?" . http_build_query([
             'method' => 'report',
             'reportClass' => 'cmpy',
@@ -100,6 +130,9 @@ class GCISCrawler extends BaseCrawler
             if (file_exists($pdfFile)) {
                 unlink($pdfFile);
             }
+            
+            // Mark this report as processed
+            $this->markReportProcessed($reportKey);
             
             return $ids;
             
@@ -200,6 +233,20 @@ class GCISCrawler extends BaseCrawler
     
     private function crawlBusinessReportType(int $year, int $month, string $orgId, string $typeId): array
     {
+        // Map type ID to category name
+        $categoryMap = [
+            'setup' => 'establishments',
+            'change' => 'changes',
+            'rest' => 'dissolutions'
+        ];
+        $category = $categoryMap[$typeId] ?? $typeId;
+        
+        // Check if we already have this report
+        if ($this->checkReportExists('gcis', 'businesses', $category, $year, $month)) {
+            $this->logger->info("Business report already exists for {$category} {$year}-{$month}, loading existing data");
+            return $this->loadExistingData('gcis', 'businesses', $category, $year, $month);
+        }
+        
         $yearMonth = sprintf("%03d%02d", $year, $month);
         $fileName = "{$orgId}{$typeId}{$yearMonth}.pdf";
         
@@ -219,6 +266,11 @@ class GCISCrawler extends BaseCrawler
             // Clean up temporary file
             if (file_exists($pdfFile)) {
                 unlink($pdfFile);
+            }
+            
+            // Save the data to repository
+            if (!empty($ids)) {
+                $this->saveDataToRepository('gcis', 'businesses', $category, $year, $month, $ids);
             }
             
             return $ids;
@@ -266,5 +318,15 @@ class GCISCrawler extends BaseCrawler
         
         // Fallback - assume it's already ROC year
         return $year;
+    }
+    
+    private function isReportProcessed(string $reportKey): bool
+    {
+        return in_array($reportKey, $this->processedReports);
+    }
+    
+    private function markReportProcessed(string $reportKey): void
+    {
+        $this->processedReports[] = $reportKey;
     }
 }
