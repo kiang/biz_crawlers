@@ -109,8 +109,9 @@ abstract class BaseCrawler
                     sleep($this->config['delay']);
                 }
                 
-                $response = $this->client->getClient()->get($url);
-                file_put_contents($destination, $response->getBody());
+                $httpClient = $this->client->getHttpClient();
+                $response = $httpClient->request('GET', $url);
+                file_put_contents($destination, $response->getContent());
                 
                 $this->logger->info("Successfully downloaded: {$url} to {$destination}");
                 return $destination;
