@@ -36,27 +36,20 @@ abstract class BaseCrawler
     
     protected function initializeClient(): void
     {
-        $guzzleClient = new GuzzleClient([
+        $guzzleConfig = [
             'timeout' => $this->config['timeout'],
             'verify' => false,
             'headers' => [
                 'User-Agent' => $this->config['user_agent']
             ]
-        ]);
+        ];
         
         if ($this->config['proxy']) {
-            $guzzleClient = new GuzzleClient([
-                'timeout' => $this->config['timeout'],
-                'verify' => false,
-                'proxy' => $this->config['proxy'],
-                'headers' => [
-                    'User-Agent' => $this->config['user_agent']
-                ]
-            ]);
+            $guzzleConfig['proxy'] = $this->config['proxy'];
         }
         
-        $this->client = new Client();
-        $this->client->setClient($guzzleClient);
+        $guzzleClient = new GuzzleClient($guzzleConfig);
+        $this->client = new Client($guzzleClient);
     }
     
     protected function initializeLogger(): void
