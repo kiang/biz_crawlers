@@ -3,10 +3,10 @@
 namespace BizData\Crawlers;
 
 use Goutte\Client;
-use GuzzleHttp\Client as GuzzleClient;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
 use Symfony\Component\DomCrawler\Crawler;
+use Symfony\Component\HttpClient\HttpClient;
 
 abstract class BaseCrawler
 {
@@ -36,20 +36,19 @@ abstract class BaseCrawler
     
     protected function initializeClient(): void
     {
-        $guzzleConfig = [
+        $options = [
             'timeout' => $this->config['timeout'],
-            'verify' => false,
             'headers' => [
                 'User-Agent' => $this->config['user_agent']
             ]
         ];
         
         if ($this->config['proxy']) {
-            $guzzleConfig['proxy'] = $this->config['proxy'];
+            $options['proxy'] = $this->config['proxy'];
         }
         
-        $guzzleClient = new GuzzleClient($guzzleConfig);
-        $this->client = new Client($guzzleClient);
+        $httpClient = HttpClient::create($options);
+        $this->client = new Client($httpClient);
     }
     
     protected function initializeLogger(): void

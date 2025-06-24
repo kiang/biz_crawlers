@@ -3,7 +3,7 @@
     "description": "Business Data Crawlers with Goutte",
     "require": {
         "fabpot/goutte": "^4.0",
-        "guzzlehttp/guzzle": "^7.0",
+        "symfony/http-client": "^5.0|^6.0",
         "monolog/monolog": "^2.0"
     },
     "require-dev": {
