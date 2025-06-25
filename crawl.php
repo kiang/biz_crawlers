@@ -24,7 +24,9 @@ function showUsage() {
     echo "  php crawl.php school\n";
     echo "  php crawl.php school --csv schools.csv\n";
     echo "  php crawl.php school --category \"大學\"\n";
-    echo "  php crawl.php school --tax-id 12345678\n\n";
+    echo "  php crawl.php school --tax-id 12345678\n";
+    echo "  php crawl.php detail --company --from-data 2025 4 companies --limit 10\n";
+    echo "  php crawl.php detail --business --ids 12345678,87654321\n\n";
     
     echo "Global Options:\n";
     echo "  --help              Show this help message\n";
@@ -156,6 +158,46 @@ for ($i = 2; $i < $argc; $i++) {
             $i++;
             break;
             
+        case '--ids':
+            if (!isset($argv[$i + 1])) {
+                echo "Error: --ids requires a comma-separated list of IDs\n";
+                exit(1);
+            }
+            $options['ids'] = array_filter(explode(',', $argv[$i + 1]));
+            $i++;
+            break;
+            
+        case '--from-data':
+            if (!isset($argv[$i + 3])) {
+                echo "Error: --from-data requires year, month, and type\n";
+                exit(1);
+            }
+            $options['from_data'] = [
+                'year' => intval($argv[$i + 1]),
+                'month' => intval($argv[$i + 2]),
+                'type' => $argv[$i + 3]
+            ];
+            $i += 3;
+            break;
+            
+        case '--limit':
+            if (!isset($argv[$i + 1]) || !is_numeric($argv[$i + 1])) {
+                echo "Error: --limit requires a numeric value\n";
+                exit(1);
+            }
+            $options['limit'] = intval($argv[$i + 1]);
+            $i++;
+            break;
+            
+        case '--offset':
+            if (!isset($argv[$i + 1]) || !is_numeric($argv[$i + 1])) {
+                echo "Error: --offset requires a numeric value\n";
+                exit(1);
+            }
+            $options['offset'] = intval($argv[$i + 1]);
+            $i++;
+            break;
+            
         default:
             echo "Error: Unknown option '{$argv[$i]}'\n";
             showUsage();
@@ -252,6 +294,97 @@ try {
                     echo "Exported to: {$options['csv']}\n";
                 }
             }
+            break;
+            
+        case 'detail':
+        case 'details':
+            if (!isset($options['mode'])) {
+                echo "Error: Detail crawler requires --company or --business mode\n";
+                exit(1);
+            }
+            
+            $ids = [];
+            
+            // Load IDs from various sources
+            if (isset($options['ids'])) {
+                $ids = $options['ids'];
+            } elseif (isset($options['from_data'])) {
+                $data = $options['from_data'];
+                $dataDir = __DIR__ . "/data/gcis/{$data['type']}";
+                $yearMonthDir = sprintf("%s/%03d-%02d", $dataDir, $data['year'], $data['month']);
+                $idsFile = "{$yearMonthDir}/ids_{$data['type']}_{$data['year']}_{$data['month']}.txt";
+                
+                if (!file_exists($idsFile)) {
+                    echo "Error: IDs file '{$idsFile}' does not exist\n";
+                    exit(1);
+                }
+                
+                $ids = array_filter(array_map('trim', file($idsFile)));
+                echo "Loaded " . count($ids) . " IDs from {$idsFile}\n";
+            } else {
+                echo "Error: Detail crawler requires --ids or --from-data\n";
+                exit(1);
+            }
+            
+            // Apply offset and limit
+            if (isset($options['offset'])) {
+                $ids = array_slice($ids, $options['offset']);
+            }
+            
+            if (isset($options['limit'])) {
+                $ids = array_slice($ids, 0, $options['limit']);
+            }
+            
+            echo "Processing " . count($ids) . " {$options['mode']} IDs\n";
+            
+            $processed = 0;
+            $successful = 0;
+            $failed = 0;
+            
+            foreach ($ids as $id) {
+                $id = trim($id);
+                if (empty($id)) {
+                    continue;
+                }
+                
+                $processed++;
+                echo "Processing {$options['mode']} {$id} ({$processed}/" . count($ids) . ")... ";
+                
+                try {
+                    if ($options['mode'] === 'company') {
+                        $data = $crawler->fetchCompanyDetail($id);
+                        if ($data) {
+                            $crawler->saveCompanyDetail($id, $data);
+                        }
+                    } else {
+                        $data = $crawler->fetchBusinessDetail($id);
+                        if ($data) {
+                            $crawler->saveBusinessDetail($id, $data);
+                        }
+                    }
+                    
+                    if ($data) {
+                        echo "SUCCESS\n";
+                        $successful++;
+                    } else {
+                        echo "NOT FOUND\n";
+                        $failed++;
+                    }
+                } catch (Exception $e) {
+                    echo "ERROR: " . $e->getMessage() . "\n";
+                    $failed++;
+                }
+                
+                // Progress report every 10 items
+                if ($processed % 10 === 0) {
+                    echo "Progress: {$processed}/" . count($ids) . " processed, {$successful} successful, {$failed} failed\n";
+                }
+            }
+            
+            echo "\nDetail crawl results:\n";
+            echo "Total processed: {$processed}\n";
+            echo "Successful: {$successful}\n";
+            echo "Failed: {$failed}\n";
             break;
             
         default:

@@ -37,6 +37,12 @@ class CrawlerFactory
         return new SchoolCrawler($mergedConfig);
     }
     
+    public function createDetailCrawler(array $config = []): DetailCrawler
+    {
+        $mergedConfig = array_merge($this->defaultConfig, $config);
+        return new DetailCrawler($mergedConfig);
+    }
+    
     public function createCrawler(string $type, array $config = []): BaseCrawler
     {
         switch (strtolower($type)) {
@@ -52,6 +58,10 @@ class CrawlerFactory
             case 'education':
                 return $this->createSchoolCrawler($config);
                 
+            case 'detail':
+            case 'details':
+                return $this->createDetailCrawler($config);
+                
             default:
                 throw new \InvalidArgumentException("Unknown crawler type: {$type}");
         }
@@ -62,7 +72,8 @@ class CrawlerFactory
         return [
             'gcis' => 'GCIS Company/Business Crawler',
             'tax' => 'Ministry of Finance Tax Data Crawler', 
-            'school' => 'Ministry of Education School Crawler'
+            'school' => 'Ministry of Education School Crawler',
+            'detail' => 'Company/Business Detail Crawler'
         ];
     }
 }

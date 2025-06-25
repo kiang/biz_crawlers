@@ -1,0 +1,207 @@
+#!/usr/bin/env php
+<?php
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use BizData\Crawlers\CrawlerFactory;
+
+function showUsage() {
+    echo "Usage: php crawl-details.php <type> <source> [options]\n";
+    echo "\n";
+    echo "Types:\n";
+    echo "  company    - Crawl company details\n";
+    echo "  business   - Crawl business details\n";
+    echo "\n";
+    echo "Source:\n";
+    echo "  --ids <id1,id2,id3>     Comma-separated list of IDs\n";
+    echo "  --file <filename>       File containing IDs (one per line)\n";
+    echo "  --from-data <year> <month> <type>  Load IDs from data repository\n";
+    echo "\n";
+    echo "Options:\n";
+    echo "  --enable-logs           Enable logging (logs disabled by default)\n";
+    echo "  --verbose               Enable verbose logging (implies --enable-logs)\n";
+    echo "  --limit <number>        Limit number of IDs to process\n";
+    echo "  --offset <number>       Skip first N IDs\n";
+    echo "  --help                  Show this help message\n";
+    echo "\n";
+    echo "Examples:\n";
+    echo "  php crawl-details.php company --ids 12345678,87654321\n";
+    echo "  php crawl-details.php business --file business_ids.txt --enable-logs\n";
+    echo "  php crawl-details.php company --from-data 2025 4 companies --limit 100\n";
+    exit(1);
+}
+
+// Parse command line arguments
+if ($argc < 3) {
+    showUsage();
+}
+
+$type = $argv[1];
+if (!in_array($type, ['company', 'business'])) {
+    echo "Error: Invalid type '{$type}'. Must be 'company' or 'business'.\n";
+    showUsage();
+}
+
+$options = [];
+$config = [];
+$ids = [];
+
+for ($i = 2; $i < $argc; $i++) {
+    switch ($argv[$i]) {
+        case '--help':
+            showUsage();
+            break;
+            
+        case '--enable-logs':
+            $config['enable_logging'] = true;
+            break;
+            
+        case '--verbose':
+            $config['enable_logging'] = true;
+            $config['log_level'] = \Monolog\Logger::DEBUG;
+            break;
+            
+        case '--ids':
+            if (!isset($argv[$i + 1])) {
+                echo "Error: --ids requires a comma-separated list of IDs\n";
+                showUsage();
+            }
+            $ids = array_filter(explode(',', $argv[$i + 1]));
+            $i++;
+            break;
+            
+        case '--file':
+            if (!isset($argv[$i + 1])) {
+                echo "Error: --file requires a filename\n";
+                showUsage();
+            }
+            $filename = $argv[$i + 1];
+            if (!file_exists($filename)) {
+                echo "Error: File '{$filename}' does not exist\n";
+                exit(1);
+            }
+            $ids = array_filter(array_map('trim', file($filename)));
+            $i++;
+            break;
+            
+        case '--from-data':
+            if (!isset($argv[$i + 3])) {
+                echo "Error: --from-data requires year, month, and type\n";
+                showUsage();
+            }
+            $year = intval($argv[$i + 1]);
+            $month = intval($argv[$i + 2]);
+            $dataType = $argv[$i + 3];
+            
+            $dataDir = __DIR__ . "/data/gcis/{$dataType}";
+            $yearMonthDir = sprintf("%s/%03d-%02d", $dataDir, $year, $month);
+            $idsFile = "{$yearMonthDir}/ids_{$dataType}_{$year}_{$month}.txt";
+            
+            if (!file_exists($idsFile)) {
+                echo "Error: IDs file '{$idsFile}' does not exist\n";
+                exit(1);
+            }
+            
+            $ids = array_filter(array_map('trim', file($idsFile)));
+            echo "Loaded " . count($ids) . " IDs from {$idsFile}\n";
+            $i += 3;
+            break;
+            
+        case '--limit':
+            if (!isset($argv[$i + 1]) || !is_numeric($argv[$i + 1])) {
+                echo "Error: --limit requires a numeric value\n";
+                exit(1);
+            }
+            $options['limit'] = intval($argv[$i + 1]);
+            $i++;
+            break;
+            
+        case '--offset':
+            if (!isset($argv[$i + 1]) || !is_numeric($argv[$i + 1])) {
+                echo "Error: --offset requires a numeric value\n";
+                exit(1);
+            }
+            $options['offset'] = intval($argv[$i + 1]);
+            $i++;
+            break;
+            
+        default:
+            echo "Error: Unknown option '{$argv[$i]}'\n";
+            showUsage();
+    }
+}
+
+if (empty($ids)) {
+    echo "Error: No IDs specified. Use --ids, --file, or --from-data\n";
+    showUsage();
+}
+
+// Apply offset and limit
+if (isset($options['offset'])) {
+    $ids = array_slice($ids, $options['offset']);
+}
+
+if (isset($options['limit'])) {
+    $ids = array_slice($ids, 0, $options['limit']);
+}
+
+try {
+    echo "Starting {$type} detail crawler\n";
+    echo "Processing " . count($ids) . " IDs\n";
+    
+    $config['log_file'] = "detail_crawl_{$type}_" . date('Y-m-d_H-i-s') . '.log';
+    $factory = new CrawlerFactory($config);
+    $crawler = $factory->createDetailCrawler();
+    
+    $processed = 0;
+    $successful = 0;
+    $failed = 0;
+    
+    foreach ($ids as $id) {
+        $id = trim($id);
+        if (empty($id)) {
+            continue;
+        }
+        
+        $processed++;
+        echo "Processing {$type} {$id} ({$processed}/" . count($ids) . ")... ";
+        
+        try {
+            if ($type === 'company') {
+                $data = $crawler->fetchCompanyDetail($id);
+            } else {
+                $data = $crawler->fetchBusinessDetail($id);
+            }
+            
+            if ($data) {
+                if ($type === 'company') {
+                    $crawler->saveCompanyDetail($id, $data);
+                } else {
+                    $crawler->saveBusinessDetail($id, $data);
+                }
+                echo "SUCCESS\n";
+                $successful++;
+            } else {
+                echo "NOT FOUND\n";
+                $failed++;
+            }
+        } catch (Exception $e) {
+            echo "ERROR: " . $e->getMessage() . "\n";
+            $failed++;
+        }
+        
+        // Progress report every 10 items
+        if ($processed % 10 === 0) {
+            echo "Progress: {$processed}/" . count($ids) . " processed, {$successful} successful, {$failed} failed\n";
+        }
+    }
+    
+    echo "\nCrawl completed!\n";
+    echo "Total processed: {$processed}\n";
+    echo "Successful: {$successful}\n";
+    echo "Failed: {$failed}\n";
+    
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage() . "\n";
+    exit(1);
+}
