@@ -15,10 +15,10 @@ class DetailCrawler extends BaseCrawler
     protected function getDefaultConfig(): array
     {
         $config = parent::getDefaultConfig();
-        $config['rate_limit'] = 0.1; // seconds between requests (aggressive default)
+        $config['rate_limit'] = 1; // seconds between requests (aggressive default)
         $config['retry_delay'] = 3; // seconds to wait on failure (reduced)
         $config['max_retries'] = 1; // reduced to minimum
-        $config['session_init_delay'] = 0.5; // minimal delay
+        $config['session_init_delay'] = 1; // minimal delay
         $config['search_delay'] = 1; // minimal search delay
         $config['fast_mode'] = true; // fast mode by default
         return $config;
@@ -82,6 +82,12 @@ class DetailCrawler extends BaseCrawler
     
     public function fetchCompanyDetail(string $id): ?array
     {
+        // Check if detail was crawled within last 24 hours
+        if ($this->isRecentlyCrawled($id, 'company')) {
+            $this->logger->info("Skipping company {$id} - already crawled within 24 hours");
+            return null;
+        }
+        
         $this->initializeSession();
         
         for ($retry = 0; $retry <= $this->config['max_retries']; $retry++) {
@@ -161,6 +167,12 @@ class DetailCrawler extends BaseCrawler
     
     public function fetchBusinessDetail(string $id): ?array
     {
+        // Check if detail was crawled within last 24 hours
+        if ($this->isRecentlyCrawled($id, 'business')) {
+            $this->logger->info("Skipping business {$id} - already crawled within 24 hours");
+            return null;
+        }
+        
         $this->initializeSession();
         
         for ($retry = 0; $retry <= $this->config['max_retries']; $retry++) {
@@ -510,6 +522,22 @@ class DetailCrawler extends BaseCrawler
         
         $this->logger->info("Saved business detail for {$id} to {$filepath}");
         return $filepath;
+    }
+    
+    private function isRecentlyCrawled(string $id, string $type): bool
+    {
+        $dataDir = dirname(__DIR__) . "/data/gcis/{$type}s/details";
+        $filepath = "{$dataDir}/{$id}.json";
+        
+        if (!file_exists($filepath)) {
+            return false;
+        }
+        
+        $fileModTime = filemtime($filepath);
+        $currentTime = time();
+        $hoursDiff = ($currentTime - $fileModTime) / 3600;
+        
+        return $hoursDiff < 24;
     }
     
     private function closeSession(): void
