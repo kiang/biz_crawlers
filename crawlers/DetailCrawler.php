@@ -425,22 +425,18 @@ class DetailCrawler extends BaseCrawler
                     $key = trim($tds->item(0)->nodeValue);
                     $value = trim($tds->item(1)->nodeValue);
                     
-                    // Clean specific fields following the working pattern from Updater2.php
-                    if ($key === '統一編號') {
-                        $value = str_replace(html_entity_decode('&nbsp;'), '', $value);
-                    } elseif ($key === '公司名稱') {
-                        // Remove unwanted text patterns for company name
-                        $value = preg_replace('/本項查詢服務.*?關閉/s', '', $value);
-                        $value = trim($value);
-                    } elseif ($key === '公司所在地') {
-                        // Remove "電子地圖" from address
-                        $value = str_replace('電子地圖', '', $value);
-                        $value = trim($value);
-                    } elseif ($key === '登記現況') {
-                        // Remove the tax query message
-                        $value = preg_replace('/「查詢最新營業狀況請至.*?」/', '', $value);
-                        $value = str_replace(html_entity_decode('&nbsp;'), '', $value);
-                        $value = trim($value);
+                    switch($key) {
+                        case '統一編號':
+                        case '公司名稱':
+                        case '公司所在地':
+                        case '登記現況':
+                            $pos = strpos($value, chr(13));
+                            if(false !== $pos) {
+                                $value = trim(substr($value, 0, $pos));
+                            } else {
+                                $value = trim($value);
+                            }
+                            break;
                     }
                     
                     // Parse dates
@@ -452,19 +448,39 @@ class DetailCrawler extends BaseCrawler
                             'formatted' => $value
                         ];
                     } elseif ($key === '所營事業資料') {
-                        // Parse business data as structured array similar to Updater2.php
+                        // Parse business data by finding code positions and extracting sections
                         $businessItems = [];
-                        $lines = explode("\n", trim($value));
-                        foreach ($lines as $line) {
-                            $line = trim($line);
-                            if (empty($line)) continue;
-                            if (preg_match('/^([A-Z]\d{6})\s+(.+)$/', $line, $matches)) {
-                                $businessItems[] = [
-                                    'code' => $matches[1],
-                                    'description' => trim($matches[2])
-                                ];
+                        
+                        // Find all business code positions in the text
+                        if (preg_match_all('/([A-Z][A-Z0-9]\d{5})/', $value, $matches, PREG_OFFSET_CAPTURE)) {
+                            $codes = $matches[1];
+                            
+                            for ($i = 0; $i < count($codes); $i++) {
+                                $code = $codes[$i][0];
+                                $startPos = $codes[$i][1];
+                                
+                                // Find end position (next code or end of text)
+                                $endPos = isset($codes[$i + 1]) ? $codes[$i + 1][1] : strlen($value);
+                                
+                                // Extract the section from start to end
+                                $section = substr($value, $startPos, $endPos - $startPos);
+                                
+                                // Split by whitespace characters (space, newline, tab, etc.)
+                                $parts = preg_split('/\s+/', trim($section), -1, PREG_SPLIT_NO_EMPTY);
+                                
+                                // First part should be the code, rest is description
+                                if (count($parts) > 1) {
+                                    array_shift($parts); // Remove the code part
+                                    $description = implode(' ', $parts);
+                                    
+                                    $businessItems[] = [
+                                        'code' => $code,
+                                        'description' => trim($description)
+                                    ];
+                                }
                             }
                         }
+                        
                         // If no structured data found, store as raw data
                         $data[$key] = !empty($businessItems) ? $businessItems : ['raw_data' => $value];
                     } else {
@@ -890,7 +906,8 @@ class DetailCrawler extends BaseCrawler
     
     private function isRecentlyCrawled(string $id, string $type): bool
     {
-        $dataDir = dirname(__DIR__) . "/data/gcis/{$type}s/details";
+        $pluralType = $type === 'company' ? 'companies' : 'businesses';
+        $dataDir = dirname(__DIR__) . "/data/gcis/{$pluralType}/details";
         $filepath = "{$dataDir}/{$id}.json";
         
         if (!file_exists($filepath)) {
