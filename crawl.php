@@ -26,12 +26,13 @@ function showUsage() {
     echo "  php crawl.php school --category \"大學\"\n";
     echo "  php crawl.php school --tax-id 12345678\n";
     echo "  php crawl.php detail --company --from-data 2025 4 companies --limit 10\n";
-    echo "  php crawl.php detail --business --ids 12345678,87654321\n\n";
+    echo "  php crawl.php detail --business --ids 12345678,87654321 --safe\n\n";
     
     echo "Global Options:\n";
     echo "  --help              Show this help message\n";
     echo "  --enable-logs       Enable logging (logs disabled by default)\n";
     echo "  --verbose           Enable verbose logging (implies --enable-logs)\n";
+    echo "  --safe              Enable safe mode for detail crawler (slower but more stable)\n";
     echo "  --delay <seconds>   Delay between requests (default: 1)\n";
     echo "  --timeout <seconds> Request timeout (default: 30)\n";
     echo "  --retries <count>   Retry attempts (default: 3)\n\n";
@@ -66,6 +67,15 @@ for ($i = 2; $i < $argc; $i++) {
         case '--verbose':
             $globalOptions['enable_logging'] = true;
             $globalOptions['log_level'] = \Monolog\Logger::DEBUG;
+            break;
+            
+        case '--safe':
+            $globalOptions['fast_mode'] = false;
+            $globalOptions['rate_limit'] = 0.5;
+            $globalOptions['retry_delay'] = 10;
+            $globalOptions['max_retries'] = 3;
+            $globalOptions['session_init_delay'] = 2;
+            $globalOptions['search_delay'] = 5;
             break;
             
         case '--delay':

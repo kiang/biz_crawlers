@@ -20,6 +20,7 @@ function showUsage() {
     echo "Options:\n";
     echo "  --enable-logs           Enable logging (logs disabled by default)\n";
     echo "  --verbose               Enable verbose logging (implies --enable-logs)\n";
+    echo "  --safe                  Enable safe mode (slower but more stable, overrides default fast mode)\n";
     echo "  --limit <number>        Limit number of IDs to process\n";
     echo "  --offset <number>       Skip first N IDs\n";
     echo "  --help                  Show this help message\n";
@@ -28,6 +29,7 @@ function showUsage() {
     echo "  php crawl-details.php company --ids 12345678,87654321\n";
     echo "  php crawl-details.php business --file business_ids.txt --enable-logs\n";
     echo "  php crawl-details.php company --from-data 2025 4 companies --limit 100\n";
+    echo "  php crawl-details.php company --from-data 2025 4 companies --limit 10 --safe\n";
     exit(1);
 }
 
@@ -59,6 +61,15 @@ for ($i = 2; $i < $argc; $i++) {
         case '--verbose':
             $config['enable_logging'] = true;
             $config['log_level'] = \Monolog\Logger::DEBUG;
+            break;
+            
+        case '--safe':
+            $config['fast_mode'] = false;
+            $config['rate_limit'] = 0.5;
+            $config['retry_delay'] = 10;
+            $config['max_retries'] = 3;
+            $config['session_init_delay'] = 2;
+            $config['search_delay'] = 5;
             break;
             
         case '--ids':

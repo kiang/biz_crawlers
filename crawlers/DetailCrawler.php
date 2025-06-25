@@ -15,9 +15,12 @@ class DetailCrawler extends BaseCrawler
     protected function getDefaultConfig(): array
     {
         $config = parent::getDefaultConfig();
-        $config['rate_limit'] = 0.5; // seconds between requests
-        $config['retry_delay'] = 10; // seconds to wait on failure
-        $config['max_retries'] = 3;
+        $config['rate_limit'] = 0.1; // seconds between requests (aggressive default)
+        $config['retry_delay'] = 3; // seconds to wait on failure (reduced)
+        $config['max_retries'] = 1; // reduced to minimum
+        $config['session_init_delay'] = 0.5; // minimal delay
+        $config['search_delay'] = 1; // minimal search delay
+        $config['fast_mode'] = true; // fast mode by default
         return $config;
     }
     
@@ -48,7 +51,12 @@ class DetailCrawler extends BaseCrawler
         curl_setopt($this->sessionCurl, CURLOPT_URL, self::BASE_URL);
         curl_exec($this->sessionCurl);
         
-        sleep(2);
+        if (!$this->config['fast_mode']) {
+            sleep($this->config['session_init_delay']);
+        } else {
+            // Minimal delay even in fast mode for session stability
+            usleep(200000); // 0.2 seconds
+        }
         
         // Second request to validation page
         curl_setopt($this->sessionCurl, CURLOPT_URL, self::QUERY_URL);
@@ -62,7 +70,7 @@ class DetailCrawler extends BaseCrawler
     
     private function rateLimitedFetch(): void
     {
-        if (self::$lastFetch !== null) {
+        if (!$this->config['fast_mode'] && self::$lastFetch !== null) {
             $elapsed = microtime(true) - self::$lastFetch;
             $waitTime = $this->config['rate_limit'] - $elapsed;
             if ($waitTime > 0) {
@@ -98,7 +106,12 @@ class DetailCrawler extends BaseCrawler
                     throw new \Exception("HTTP error: " . $info['http_code']);
                 }
                 
-                sleep(5); // Required delay as per original code
+                // Apply search delay based on mode
+                if ($this->config['fast_mode']) {
+                    usleep(500000); // 0.5 seconds in fast mode
+                } else {
+                    sleep($this->config['search_delay']); // Standard delay
+                }
                 
                 if (strpos($content, '很抱歉，我們無法找到符合條件的查詢結果。') !== false) {
                     $this->logger->warning("No company found for ID: {$id}");
@@ -127,13 +140,15 @@ class DetailCrawler extends BaseCrawler
                 $this->logger->warning("Attempt " . ($retry + 1) . " failed for company {$id}: " . $e->getMessage());
                 
                 if ($retry < $this->config['max_retries']) {
-                    $waitTime = $this->config['retry_delay'] * pow(2, $retry);
+                    $waitTime = $this->config['retry_delay'] + $retry; // Linear instead of exponential
                     $this->logger->info("Waiting {$waitTime} seconds before retry");
                     sleep($waitTime);
                     
-                    // Reinitialize session on failure
-                    $this->closeSession();
-                    $this->initializeSession();
+                    // Only reinitialize session every other retry to save time
+                    if ($retry % 2 === 0) {
+                        $this->closeSession();
+                        $this->initializeSession();
+                    }
                 } else {
                     $this->logger->error("Failed to fetch company {$id} after " . ($retry + 1) . " attempts");
                     return null;
@@ -170,7 +185,12 @@ class DetailCrawler extends BaseCrawler
                     throw new \Exception("HTTP error: " . $info['http_code']);
                 }
                 
-                sleep(5); // Required delay
+                // Apply search delay based on mode
+                if ($this->config['fast_mode']) {
+                    usleep(500000); // 0.5 seconds in fast mode
+                } else {
+                    sleep($this->config['search_delay']); // Standard delay
+                }
                 
                 if (strpos($content, '很抱歉，我們無法找到符合條件的查詢結果。') !== false) {
                     $this->logger->warning("No business found for ID: {$id}");
@@ -199,13 +219,15 @@ class DetailCrawler extends BaseCrawler
                 $this->logger->warning("Attempt " . ($retry + 1) . " failed for business {$id}: " . $e->getMessage());
                 
                 if ($retry < $this->config['max_retries']) {
-                    $waitTime = $this->config['retry_delay'] * pow(2, $retry);
+                    $waitTime = $this->config['retry_delay'] + $retry; // Linear instead of exponential
                     $this->logger->info("Waiting {$waitTime} seconds before retry");
                     sleep($waitTime);
                     
-                    // Reinitialize session on failure
-                    $this->closeSession();
-                    $this->initializeSession();
+                    // Only reinitialize session every other retry to save time
+                    if ($retry % 2 === 0) {
+                        $this->closeSession();
+                        $this->initializeSession();
+                    }
                 } else {
                     $this->logger->error("Failed to fetch business {$id} after " . ($retry + 1) . " attempts");
                     return null;
