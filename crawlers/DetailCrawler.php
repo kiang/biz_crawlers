@@ -436,19 +436,12 @@ class DetailCrawler extends BaseCrawler
                             } else {
                                 $value = trim($value);
                             }
+                            $value = preg_replace('/\s/', '', $value);
+                            $value = str_replace(html_entity_decode('&nbsp;'), '', $value);
+                            $data[$key] = $value;
                             break;
-                    }
-                    
-                    // Parse dates
-                    if (preg_match('/^(\d+)年(\d+)月(\d+)日$/', $value, $matches)) {
-                        $data[$key] = [
-                            'year' => intval($matches[1]) + 1911,
-                            'month' => intval($matches[2]),
-                            'day' => intval($matches[3]),
-                            'formatted' => $value
-                        ];
-                    } elseif ($key === '所營事業資料') {
-                        // Parse business data by finding code positions and extracting sections
+                        case '所營事業資料':
+                            // Parse business data by finding code positions and extracting sections
                         $businessItems = [];
                         
                         // Find all business code positions in the text
@@ -480,11 +473,21 @@ class DetailCrawler extends BaseCrawler
                                 }
                             }
                         }
-                        
                         // If no structured data found, store as raw data
                         $data[$key] = !empty($businessItems) ? $businessItems : ['raw_data' => $value];
-                    } else {
-                        $data[$key] = $value;
+                            break;
+                            default:
+                            if (preg_match('/^(\d+)年(\d+)月(\d+)日$/', $value, $matches)) {
+$data[$key] = [
+                            'year' => intval($matches[1]) + 1911,
+                            'month' => intval($matches[2]),
+                            'day' => intval($matches[3]),
+                            'formatted' => $value
+                        ];
+                            } else {
+                                $data[$key] = $value;
+                            }
+
                     }
                 }
             }
