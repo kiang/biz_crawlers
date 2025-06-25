@@ -6,17 +6,39 @@ require_once __DIR__ . '/vendor/autoload.php';
 use BizData\Crawlers\CrawlerFactory;
 
 function showUsage() {
-    echo "Usage: php crawl-tax.php [csv_file]\n";
+    echo "Usage: php crawl-tax.php [csv_file] [options]\n";
     echo "\n";
     echo "If no CSV file is provided, the script will download the latest data from FIA.\n";
+    echo "\n";
+    echo "Options:\n";
+    echo "  --enable-logs       Enable logging (logs disabled by default)\n";
+    echo "  --verbose           Enable verbose logging (implies --enable-logs)\n";
     echo "\n";
     echo "Examples:\n";
     echo "  php crawl-tax.php                    # Download latest data\n";
     echo "  php crawl-tax.php bgmopen1.csv       # Process existing CSV file\n";
+    echo "  php crawl-tax.php --enable-logs      # Download with logging\n";
+    echo "  php crawl-tax.php bgmopen1.csv --verbose  # Process with verbose logging\n";
     exit(1);
 }
 
-$csvFile = $argv[1] ?? null;
+// Parse arguments
+$csvFile = null;
+$config = [];
+
+for ($i = 1; $i < $argc; $i++) {
+    if ($argv[$i] === '--enable-logs') {
+        $config['enable_logging'] = true;
+    } elseif ($argv[$i] === '--verbose') {
+        $config['enable_logging'] = true;
+        $config['log_level'] = \Monolog\Logger::DEBUG;
+    } elseif (!$csvFile && !str_starts_with($argv[$i], '--')) {
+        $csvFile = $argv[$i];
+    } else {
+        echo "Error: Unknown option '{$argv[$i]}'\n";
+        showUsage();
+    }
+}
 
 if ($csvFile && !file_exists($csvFile)) {
     echo "Error: CSV file '{$csvFile}' does not exist.\n";
@@ -32,9 +54,8 @@ try {
         echo "Downloading latest tax data from Ministry of Finance\n";
     }
     
-    $factory = new CrawlerFactory([
-        'log_file' => 'tax_crawl_' . date('Y-m-d_H-i-s') . '.log'
-    ]);
+    $config['log_file'] = 'tax_crawl_' . date('Y-m-d_H-i-s') . '.log';
+    $factory = new CrawlerFactory($config);
     
     $crawler = $factory->createTaxCrawler();
     

@@ -12,6 +12,8 @@ function showUsage() {
     echo "  --csv <filename>    Export results to CSV file\n";
     echo "  --category <name>   Filter by category name\n";
     echo "  --tax-id <id>       Search for specific tax ID\n";
+    echo "  --enable-logs       Enable logging (logs disabled by default)\n";
+    echo "  --verbose           Enable verbose logging (implies --enable-logs)\n";
     echo "  --help              Show this help message\n";
     echo "\n";
     echo "Examples:\n";
@@ -24,10 +26,20 @@ function showUsage() {
 
 // Parse command line arguments
 $options = [];
+$config = [];
 for ($i = 1; $i < $argc; $i++) {
     switch ($argv[$i]) {
         case '--help':
             showUsage();
+            break;
+            
+        case '--enable-logs':
+            $config['enable_logging'] = true;
+            break;
+            
+        case '--verbose':
+            $config['enable_logging'] = true;
+            $config['log_level'] = \Monolog\Logger::DEBUG;
             break;
             
         case '--csv':
@@ -66,9 +78,8 @@ for ($i = 1; $i < $argc; $i++) {
 try {
     echo "Starting school data crawl\n";
     
-    $factory = new CrawlerFactory([
-        'log_file' => 'school_crawl_' . date('Y-m-d_H-i-s') . '.log'
-    ]);
+    $config['log_file'] = 'school_crawl_' . date('Y-m-d_H-i-s') . '.log';
+    $factory = new CrawlerFactory($config);
     
     $crawler = $factory->createSchoolCrawler();
     

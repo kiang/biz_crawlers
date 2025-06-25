@@ -30,7 +30,8 @@ abstract class BaseCrawler
             'user_agent' => 'BizData Crawler/1.0',
             'proxy' => null,
             'log_file' => 'crawler.log',
-            'log_level' => Logger::INFO
+            'log_level' => Logger::INFO,
+            'enable_logging' => false
         ];
     }
     
@@ -54,8 +55,10 @@ abstract class BaseCrawler
     protected function initializeLogger(): void
     {
         $this->logger = new Logger('crawler');
-        $handler = new StreamHandler($this->config['log_file'], $this->config['log_level']);
-        $this->logger->pushHandler($handler);
+        if ($this->config['enable_logging']) {
+            $handler = new StreamHandler($this->config['log_file'], $this->config['log_level']);
+            $this->logger->pushHandler($handler);
+        }
     }
     
     protected function fetch(string $url): Crawler

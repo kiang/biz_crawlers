@@ -28,7 +28,8 @@ function showUsage() {
     
     echo "Global Options:\n";
     echo "  --help              Show this help message\n";
-    echo "  --verbose           Enable verbose logging\n";
+    echo "  --enable-logs       Enable logging (logs disabled by default)\n";
+    echo "  --verbose           Enable verbose logging (implies --enable-logs)\n";
     echo "  --delay <seconds>   Delay between requests (default: 1)\n";
     echo "  --timeout <seconds> Request timeout (default: 30)\n";
     echo "  --retries <count>   Retry attempts (default: 3)\n\n";
@@ -56,7 +57,12 @@ for ($i = 2; $i < $argc; $i++) {
             showUsage();
             break;
             
+        case '--enable-logs':
+            $globalOptions['enable_logging'] = true;
+            break;
+            
         case '--verbose':
+            $globalOptions['enable_logging'] = true;
             $globalOptions['log_level'] = \Monolog\Logger::DEBUG;
             break;
             
