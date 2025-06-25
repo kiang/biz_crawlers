@@ -1,5 +1,12 @@
 <?php
 
+/**
+ * DetailCrawler for Taiwan Business Registry (findbiz.nat.gov.tw)
+ * 
+ * Original crawler implementation by Ronny Wang (@ronnywang)
+ * Enhanced and modified for this project
+ */
+
 namespace BizData\Crawlers;
 
 use Symfony\Component\DomCrawler\Crawler;
