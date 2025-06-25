@@ -186,12 +186,11 @@ try {
             
             if ($options['mode'] === 'company') {
                 $ids = $crawler->crawl(['year' => $options['year'], 'month' => $options['month']]);
+                $idsFile = $crawler->saveIdList('companies', $options['year'], $options['month'], $ids);
             } else {
                 $ids = $crawler->crawlBusiness($options['year'], $options['month']);
+                $idsFile = $crawler->saveIdList('businesses', $options['year'], $options['month'], $ids);
             }
-            
-            $idsFile = "ids_{$options['mode']}_{$options['year']}_{$options['month']}.txt";
-            file_put_contents($idsFile, implode("\n", $ids));
             
             echo "Found " . count($ids) . " unique IDs\n";
             echo "IDs saved to: {$idsFile}\n";

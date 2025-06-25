@@ -251,5 +251,28 @@ abstract class BaseCrawler
         return array_column($data['data'], 'id');
     }
     
+    protected function saveIdsToDataRepository(string $source, string $type, int $year, int $month, array $ids): string
+    {
+        $dataDir = dirname(__DIR__) . '/data';
+        $sourceDir = "{$dataDir}/{$source}";
+        
+        if ($type) {
+            $sourceDir .= "/{$type}";
+        }
+        
+        $yearMonthDir = sprintf("%s/%03d-%02d", $sourceDir, $year, $month);
+        
+        if (!is_dir($yearMonthDir)) {
+            mkdir($yearMonthDir, 0755, true);
+        }
+        
+        $filename = "ids_{$type}_{$year}_{$month}.txt";
+        $filepath = "{$yearMonthDir}/{$filename}";
+        
+        file_put_contents($filepath, implode("\n", $ids));
+        
+        return $filepath;
+    }
+    
     abstract public function crawl(array $params = []): array;
 }

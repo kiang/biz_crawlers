@@ -485,4 +485,9 @@ class GCISCrawler extends BaseCrawler
         $trackingFile = "{$dataDir}/processed_pdfs.json";
         file_put_contents($trackingFile, json_encode($this->processedPdfs, JSON_PRETTY_PRINT));
     }
+    
+    public function saveIdList(string $type, int $year, int $month, array $ids): string
+    {
+        return $this->saveIdsToDataRepository('gcis', $type, $year, $month, $ids);
+    }
 }

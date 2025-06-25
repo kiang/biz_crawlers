@@ -76,9 +76,8 @@ try {
         $ids = $crawler->crawlBusiness($year, $month);
     }
     
-    // Save IDs to file for further processing
-    $idsFile = "ids_{$type}_{$year}_{$month}.txt";
-    file_put_contents($idsFile, implode("\n", $ids));
+    // Save IDs to data repository
+    $idsFile = $crawler->saveIdList($type === 'company' ? 'companies' : 'businesses', $year, $month, $ids);
     
     echo "Crawl completed successfully!\n";
     echo "Found " . count($ids) . " unique IDs\n";
