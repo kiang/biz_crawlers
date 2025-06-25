@@ -15,12 +15,12 @@ class DetailCrawler extends BaseCrawler
     protected function getDefaultConfig(): array
     {
         $config = parent::getDefaultConfig();
-        $config['rate_limit'] = 1; // seconds between requests (aggressive default)
+        $config['rate_limit'] = 2; // seconds between requests (2 seconds to comply with server limit)
         $config['retry_delay'] = 3; // seconds to wait on failure (reduced)
         $config['max_retries'] = 1; // reduced to minimum
         $config['session_init_delay'] = 1; // minimal delay
-        $config['search_delay'] = 1; // minimal search delay
-        $config['fast_mode'] = true; // fast mode by default
+        $config['search_delay'] = 2; // 2 seconds search delay to prevent rate limiting
+        $config['fast_mode'] = false; // disable fast mode to ensure delays are respected
         return $config;
     }
     
@@ -92,6 +92,7 @@ class DetailCrawler extends BaseCrawler
         
         for ($retry = 0; $retry <= $this->config['max_retries']; $retry++) {
             try {
+                // Always wait at least 2 seconds before making search request  
                 $this->rateLimitedFetch();
                 
                 $this->logger->info("Fetching company detail for ID: {$id} (attempt " . ($retry + 1) . ")");
@@ -112,30 +113,59 @@ class DetailCrawler extends BaseCrawler
                     throw new \Exception("HTTP error: " . $info['http_code']);
                 }
                 
-                // Apply search delay based on mode
-                if ($this->config['fast_mode']) {
-                    usleep(500000); // 0.5 seconds in fast mode
-                } else {
-                    sleep($this->config['search_delay']); // Standard delay
+                // Apply mandatory 2-second search delay
+                sleep($this->config['search_delay']); // Always apply search delay to prevent rate limiting
+                
+                // Check for rate limiting
+                if (strpos($content, '本系統限制使用者間隔2秒鐘才能進行下一次查詢') !== false) {
+                    $this->logger->info("Rate limit detected for company {$id}, waiting 2 seconds and retrying");
+                    // Save rate limited response for analysis
+                    $this->saveRawHtml($id, $content, 'company', '_rate_limited_' . ($retry + 1));
+                    sleep(2);
+                    continue; // Retry the same attempt
                 }
                 
                 if (strpos($content, '很抱歉，我們無法找到符合條件的查詢結果。') !== false) {
                     $this->logger->warning("No company found for ID: {$id}");
+                    // Save search results HTML even when NOT FOUND for analysis
+                    $this->saveRawHtml($id, $content, 'company', '_search_not_found');
                     return null;
                 }
+                
+                // Save search results HTML for analysis
+                $this->saveRawHtml($id, $content, 'company', '_search_results');
                 
                 // Parse search results to get detail URL
                 $detailUrl = $this->parseSearchResults($content, 'company');
                 if (!$detailUrl) {
+                    $this->logger->error("Could not find detail URL in search results for company {$id}");
                     throw new \Exception("Could not find detail URL in search results");
                 }
+                
+                $this->logger->info("Found detail URL for company {$id}: {$detailUrl}");
                 
                 // Fetch detailed information
                 $this->rateLimitedFetch();
                 $detailContent = $this->fetchDetailPage($detailUrl);
                 
+                // Check if we got a valid detail page
+                if (empty($detailContent) || strlen($detailContent) < 1000) {
+                    throw new \Exception("Received empty or invalid detail page content");
+                }
+                
+                // Save raw HTML for analysis
+                $this->saveRawHtml($id, $detailContent, 'company', '_detail_page');
+                
                 // Parse company details
                 $companyData = $this->parseCompanyDetail($detailContent);
+                
+                // Validate that we got meaningful data
+                if (empty($companyData) || count($companyData) < 3) {
+                    $this->logger->error("Failed to parse company details for {$id} - insufficient data extracted");
+                    // HTML already saved above as '_detail_page'
+                    throw new \Exception("Failed to parse company details - insufficient data extracted");
+                }
+                
                 $companyData['source_url'] = $detailUrl;
                 $companyData['crawled_at'] = date('c');
                 
@@ -177,6 +207,7 @@ class DetailCrawler extends BaseCrawler
         
         for ($retry = 0; $retry <= $this->config['max_retries']; $retry++) {
             try {
+                // Always wait at least 2 seconds before making search request
                 $this->rateLimitedFetch();
                 
                 $this->logger->info("Fetching business detail for ID: {$id} (attempt " . ($retry + 1) . ")");
@@ -197,30 +228,59 @@ class DetailCrawler extends BaseCrawler
                     throw new \Exception("HTTP error: " . $info['http_code']);
                 }
                 
-                // Apply search delay based on mode
-                if ($this->config['fast_mode']) {
-                    usleep(500000); // 0.5 seconds in fast mode
-                } else {
-                    sleep($this->config['search_delay']); // Standard delay
+                // Apply mandatory 2-second search delay
+                sleep($this->config['search_delay']); // Always apply search delay to prevent rate limiting
+                
+                // Check for rate limiting
+                if (strpos($content, '本系統限制使用者間隔2秒鐘才能進行下一次查詢') !== false) {
+                    $this->logger->info("Rate limit detected for business {$id}, waiting 2 seconds and retrying");
+                    // Save rate limited response for analysis
+                    $this->saveRawHtml($id, $content, 'business', '_rate_limited_' . ($retry + 1));
+                    sleep(2);
+                    continue; // Retry the same attempt
                 }
                 
                 if (strpos($content, '很抱歉，我們無法找到符合條件的查詢結果。') !== false) {
                     $this->logger->warning("No business found for ID: {$id}");
+                    // Save search results HTML even when NOT FOUND for analysis
+                    $this->saveRawHtml($id, $content, 'business', '_search_not_found');
                     return null;
                 }
+                
+                // Save search results HTML for analysis
+                $this->saveRawHtml($id, $content, 'business', '_search_results');
                 
                 // Parse search results to get detail URL
                 $detailUrl = $this->parseSearchResults($content, 'business');
                 if (!$detailUrl) {
+                    $this->logger->error("Could not find detail URL in search results for business {$id}");
                     throw new \Exception("Could not find detail URL in search results");
                 }
+                
+                $this->logger->info("Found detail URL for business {$id}: {$detailUrl}");
                 
                 // Fetch detailed information
                 $this->rateLimitedFetch();
                 $detailContent = $this->fetchDetailPage($detailUrl);
                 
+                // Check if we got a valid detail page
+                if (empty($detailContent) || strlen($detailContent) < 1000) {
+                    throw new \Exception("Received empty or invalid detail page content");
+                }
+                
+                // Save raw HTML for analysis
+                $this->saveRawHtml($id, $detailContent, 'business', '_detail_page');
+                
                 // Parse business details
                 $businessData = $this->parseBusinessDetail($detailContent);
+                
+                // Validate that we got meaningful data
+                if (empty($businessData) || count($businessData) < 3) {
+                    $this->logger->error("Failed to parse business details for {$id} - insufficient data extracted");
+                    // HTML already saved above as '_detail_page'
+                    throw new \Exception("Failed to parse business details - insufficient data extracted");
+                }
+                
                 $businessData['source_url'] = $detailUrl;
                 $businessData['crawled_at'] = date('c');
                 
@@ -252,7 +312,9 @@ class DetailCrawler extends BaseCrawler
     
     private function parseSearchResults(string $content, string $type): ?string
     {
+        // Handle UTF-8 encoding properly for Chinese characters
         $content = str_replace('<head>', '<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">', $content);
+        
         $doc = new \DOMDocument();
         @$doc->loadHTML($content);
         
@@ -322,16 +384,34 @@ class DetailCrawler extends BaseCrawler
     
     private function parseCompanyDetail(string $content): array
     {
-        $content = str_replace('<head>', '<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">', $content);
+        // Debug: Check if expected content is present
+        if (strpos($content, 'tabCmpyContent') === false) {
+            $this->logger->warning("HTML does not contain tabCmpyContent element");
+        }
+        
+        // Handle UTF-8 encoding properly for Chinese characters
+        // Use meta tag to specify UTF-8 encoding for DOMDocument  
+        $content = preg_replace('/<head[^>]*>/i', '<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">', $content);
+        
         $doc = new \DOMDocument();
         @$doc->loadHTML($content);
         
         $data = [];
         
         // Parse basic company information
-        if ($table = $doc->getElementById('tabCmpyContent')) {
-            $tbody = $table->getElementsByTagName('tbody')->item(0);
-            if ($tbody) {
+        $tabDiv = $doc->getElementById('tabCmpyContent');
+        $this->logger->debug("Looking for tabCmpyContent div: " . ($tabDiv ? 'FOUND' : 'NOT FOUND'));
+        
+        if ($tabDiv) {
+            // Find table within the div
+            $tables = $tabDiv->getElementsByTagName('table');
+            $table = $tables->length > 0 ? $tables->item(0) : null;
+            $this->logger->debug("Looking for table within div: " . ($table ? 'FOUND' : 'NOT FOUND'));
+            
+            if ($table) {
+                $tbody = $table->getElementsByTagName('tbody')->item(0);
+                $this->logger->debug("Looking for tbody: " . ($tbody ? 'FOUND' : 'NOT FOUND'));
+                if ($tbody) {
                 foreach ($tbody->childNodes as $tr) {
                     if ($tr->nodeName !== 'tr') {
                         continue;
@@ -345,6 +425,24 @@ class DetailCrawler extends BaseCrawler
                     $key = trim($tds->item(0)->nodeValue);
                     $value = trim($tds->item(1)->nodeValue);
                     
+                    // Clean specific fields following the working pattern from Updater2.php
+                    if ($key === '統一編號') {
+                        $value = str_replace(html_entity_decode('&nbsp;'), '', $value);
+                    } elseif ($key === '公司名稱') {
+                        // Remove unwanted text patterns for company name
+                        $value = preg_replace('/本項查詢服務.*?關閉/s', '', $value);
+                        $value = trim($value);
+                    } elseif ($key === '公司所在地') {
+                        // Remove "電子地圖" from address
+                        $value = str_replace('電子地圖', '', $value);
+                        $value = trim($value);
+                    } elseif ($key === '登記現況') {
+                        // Remove the tax query message
+                        $value = preg_replace('/「查詢最新營業狀況請至.*?」/', '', $value);
+                        $value = str_replace(html_entity_decode('&nbsp;'), '', $value);
+                        $value = trim($value);
+                    }
+                    
                     // Parse dates
                     if (preg_match('/^(\d+)年(\d+)月(\d+)日$/', $value, $matches)) {
                         $data[$key] = [
@@ -353,18 +451,41 @@ class DetailCrawler extends BaseCrawler
                             'day' => intval($matches[3]),
                             'formatted' => $value
                         ];
+                    } elseif ($key === '所營事業資料') {
+                        // Parse business data as structured array similar to Updater2.php
+                        $businessItems = [];
+                        $lines = explode("\n", trim($value));
+                        foreach ($lines as $line) {
+                            $line = trim($line);
+                            if (empty($line)) continue;
+                            if (preg_match('/^([A-Z]\d{6})\s+(.+)$/', $line, $matches)) {
+                                $businessItems[] = [
+                                    'code' => $matches[1],
+                                    'description' => trim($matches[2])
+                                ];
+                            }
+                        }
+                        // If no structured data found, store as raw data
+                        $data[$key] = !empty($businessItems) ? $businessItems : ['raw_data' => $value];
                     } else {
                         $data[$key] = $value;
                     }
                 }
             }
         }
+        }
+        
+        $this->logger->debug("Parsed company data fields: " . count($data));
         
         // Parse shareholders
-        if ($table = $doc->getElementById('tabShareHolderContent')) {
+        $shareDiv = $doc->getElementById('tabShareHolderContent');
+        if ($shareDiv) {
             $shareholders = [];
-            $tbody = $table->getElementsByTagName('tbody')->item(0);
-            if ($tbody) {
+            $tables = $shareDiv->getElementsByTagName('table');
+            $table = $tables->length > 0 ? $tables->item(0) : null;
+            if ($table) {
+                $tbody = $table->getElementsByTagName('tbody')->item(0);
+                if ($tbody) {
                 foreach ($tbody->childNodes as $tr) {
                     if ($tr->nodeName !== 'tr') {
                         continue;
@@ -386,14 +507,19 @@ class DetailCrawler extends BaseCrawler
                     $shareholders[] = $shareholder;
                 }
             }
+            }
             $data['shareholders'] = $shareholders;
         }
         
         // Parse managers
-        if ($table = $doc->getElementById('tabMgrContent')) {
+        $mgrDiv = $doc->getElementById('tabMgrContent');
+        if ($mgrDiv) {
             $managers = [];
-            $tbody = $table->getElementsByTagName('tbody')->item(0);
-            if ($tbody) {
+            $tables = $mgrDiv->getElementsByTagName('table');
+            $table = $tables->length > 0 ? $tables->item(0) : null;
+            if ($table) {
+                $tbody = $table->getElementsByTagName('tbody')->item(0);
+                if ($tbody) {
                 foreach ($tbody->childNodes as $tr) {
                     if ($tr->nodeName !== 'tr') {
                         continue;
@@ -423,7 +549,14 @@ class DetailCrawler extends BaseCrawler
                     $managers[] = $manager;
                 }
             }
+            }
             $data['managers'] = $managers;
+        }
+        
+        // Log final parsing results
+        $this->logger->debug("Final parsed company data contains " . count($data) . " fields");
+        if (empty($data)) {
+            $this->logger->error("No company data was parsed from the HTML content");
         }
         
         return $data;
@@ -431,7 +564,9 @@ class DetailCrawler extends BaseCrawler
     
     private function parseBusinessDetail(string $content): array
     {
+        // Handle UTF-8 encoding properly for Chinese characters  
         $content = str_replace('<head>', '<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">', $content);
+        
         $doc = new \DOMDocument();
         @$doc->loadHTML($content);
         
@@ -474,6 +609,11 @@ class DetailCrawler extends BaseCrawler
     
     public function saveCompanyDetail(string $id, array $data): string
     {
+        $this->logger->debug("saveCompanyDetail called for {$id} with " . count($data) . " fields");
+        if (empty($data)) {
+            $this->logger->error("saveCompanyDetail received empty data for {$id}");
+        }
+        
         $dataDir = dirname(__DIR__) . '/data/gcis/companies/details';
         if (!is_dir($dataDir)) {
             mkdir($dataDir, 0755, true);
@@ -482,6 +622,9 @@ class DetailCrawler extends BaseCrawler
         $filename = "{$id}.json";
         $filepath = "{$dataDir}/{$filename}";
         
+        // Clean data recursively to ensure JSON encoding works
+        $cleanData = $this->cleanDataForJson($data);
+        
         $saveData = [
             'metadata' => [
                 'id' => $id,
@@ -489,12 +632,40 @@ class DetailCrawler extends BaseCrawler
                 'crawled_at' => date('c'),
                 'source' => 'findbiz.nat.gov.tw'
             ],
-            'data' => $data
+            'data' => $cleanData
         ];
         
-        file_put_contents($filepath, json_encode($saveData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        // Try encoding with different options to handle UTF-8 issues
+        $jsonData = json_encode($saveData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         
-        $this->logger->info("Saved company detail for {$id} to {$filepath}");
+        if ($jsonData === false) {
+            $this->logger->warning("JSON encoding failed with UNESCAPED_UNICODE: " . json_last_error_msg());
+            // Try without JSON_UNESCAPED_UNICODE
+            $jsonData = json_encode($saveData, JSON_PRETTY_PRINT);
+            
+            if ($jsonData === false) {
+                $this->logger->warning("JSON encoding failed without UNESCAPED_UNICODE: " . json_last_error_msg());
+                // Last resort: try with escaped unicode and no pretty print
+                $jsonData = json_encode($saveData);
+                
+                if ($jsonData === false) {
+                    $this->logger->error("All JSON encoding attempts failed for {$id}: " . json_last_error_msg());
+                    // Save error information instead of empty file
+                    $errorData = [
+                        'error' => 'JSON encoding failed',
+                        'message' => json_last_error_msg(),
+                        'id' => $id,
+                        'timestamp' => date('c'),
+                        'field_count' => count($data)
+                    ];
+                    $jsonData = json_encode($errorData);
+                }
+            }
+        }
+        
+        file_put_contents($filepath, $jsonData);
+        
+        $this->logger->info("Saved company detail for {$id} to {$filepath} (" . strlen($jsonData) . " bytes)");
         return $filepath;
     }
     
@@ -521,6 +692,199 @@ class DetailCrawler extends BaseCrawler
         file_put_contents($filepath, json_encode($saveData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         
         $this->logger->info("Saved business detail for {$id} to {$filepath}");
+        return $filepath;
+    }
+    
+    private function cleanFieldValue(string $value): string
+    {
+        // Remove excessive whitespace, tabs, and carriage returns
+        $value = preg_replace('/[\r\n\t]+/', ' ', $value);
+        
+        // Remove common unwanted text patterns
+        $unwantedPatterns = [
+            '/\s*訂閱\s*$/',
+            '/\s*Google搜尋\s*/',
+            '/\s*電子地圖\s*/',
+            '/\s*地址所屬公司家數:\s*\d+\s*/',
+            '/「查詢最新營業狀況請至.*?」/',
+            '/「國際貿易署廠商英文名稱查詢.*?」/',
+            '/「國際貿易署廠商英文名稱查詢」本項查詢服務.*?關閉/s',
+            '/本項查詢服務.*?關閉/s',
+            '/客服專線：.*?$/',
+            '/已了解，開始查詢.*?$/',
+            '/\s*關閉\s*$/',
+        ];
+        
+        foreach ($unwantedPatterns as $pattern) {
+            $value = preg_replace($pattern, '', $value);
+        }
+        
+        // Clean up multiple spaces and trim
+        $value = preg_replace('/\s+/', ' ', $value);
+        $value = trim($value);
+        
+        return $value;
+    }
+    
+    private function parseBusinessItems(string $businessData): array
+    {
+        $items = [];
+        
+        if (empty(trim($businessData))) {
+            return $items;
+        }
+        
+        // Split by business codes (pattern: letter followed by numbers and space)
+        $parts = preg_split('/([A-Z]\d{6})\s+/', $businessData, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+        
+        for ($i = 0; $i < count($parts); $i += 2) {
+            if (isset($parts[$i]) && isset($parts[$i + 1])) {
+                $code = trim($parts[$i]);
+                $description = trim($parts[$i + 1]);
+                
+                if (!empty($code) && !empty($description)) {
+                    $items[] = [
+                        'code' => $code,
+                        'description' => $description
+                    ];
+                }
+            }
+        }
+        
+        // If no items parsed, return the raw data for debugging
+        if (empty($items) && !empty(trim($businessData))) {
+            return ['raw_data' => trim($businessData)];
+        }
+        
+        return $items;
+    }
+    
+    private function trimKeyField(string $value): string
+    {
+        // Remove any remaining unwanted characters that might slip through
+        $value = preg_replace('/\s+/', ' ', $value); // Normalize spaces
+        $value = trim($value);
+        
+        return $value;
+    }
+    
+    private function cleanDataForJson($data)
+    {
+        if (is_array($data)) {
+            $result = [];
+            foreach ($data as $key => $value) {
+                $cleanKey = $this->cleanStringForJson($key);
+                $result[$cleanKey] = $this->cleanDataForJson($value);
+            }
+            return $result;
+        } elseif (is_string($data)) {
+            return $this->cleanStringForJson($data);
+        } else {
+            return $data;
+        }
+    }
+    
+    private function cleanStringForJson(string $value): string
+    {
+        // Only remove control characters that actually break JSON encoding
+        // Avoid any encoding conversion that might corrupt Chinese characters
+        $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value);
+        
+        return trim($value);
+    }
+    
+    private function parseCompanyDataWithRegex(string $content): array
+    {
+        $data = [];
+        
+        // Define field mappings from the table
+        $fields = [
+            '統一編號' => '',
+            '登記現況' => '',
+            '公司名稱' => '',
+            '章程所訂外文公司名稱' => '',
+            '資本總額(元)' => '',
+            '代表人姓名' => '',
+            '公司所在地' => '',
+            '登記機關' => '',
+            '核准設立日期' => '',
+            '最後核准變更日期' => '',
+            '所營事業資料' => ''
+        ];
+        
+        // Extract the tabCmpyContent section
+        if (preg_match('/<div[^>]*id="tabCmpyContent"[^>]*>(.*?)<\/div>/s', $content, $tabMatch)) {
+            $tabContent = $tabMatch[1];
+            
+            // Extract each table row
+            if (preg_match_all('/<tr[^>]*>(.*?)<\/tr>/s', $tabContent, $rowMatches)) {
+                foreach ($rowMatches[1] as $rowContent) {
+                    // Extract cells from each row
+                    if (preg_match_all('/<td[^>]*class="txt_td"[^>]*>(.*?)<\/td>\s*<td[^>]*>(.*?)<\/td>/s', $rowContent, $cellMatches)) {
+                        for ($i = 0; $i < count($cellMatches[1]); $i++) {
+                            $key = strip_tags($cellMatches[1][$i]);
+                            $value = strip_tags($cellMatches[2][$i]);
+                            
+                            // Clean the field value
+                            $key = trim($key);
+                            $value = $this->cleanFieldValue($value);
+                            
+                            if (!empty($key) && array_key_exists($key, $fields)) {
+                                // Apply additional trimming for key fields
+                                if (in_array($key, ['統一編號', '登記現況', '公司名稱', '公司所在地'])) {
+                                    $value = $this->trimKeyField($value);
+                                }
+                                
+                                // Parse dates
+                                if (preg_match('/^(\d+)年(\d+)月(\d+)日$/', $value, $matches)) {
+                                    $data[$key] = [
+                                        'year' => intval($matches[1]) + 1911,
+                                        'month' => intval($matches[2]),
+                                        'day' => intval($matches[3]),
+                                        'formatted' => $value
+                                    ];
+                                } elseif ($key === '所營事業資料') {
+                                    $data[$key] = $this->parseBusinessItems($value);
+                                } else {
+                                    $data[$key] = $value;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        $this->logger->debug("Regex parsed company data fields: " . count($data));
+        
+        // Parse shareholders using regex (simplified version)
+        $data['shareholders'] = [];
+        
+        // Parse managers using regex (simplified version)  
+        $data['managers'] = [];
+        
+        // Log final parsing results
+        $this->logger->debug("Final regex parsed company data contains " . count($data) . " fields");
+        if (empty($data)) {
+            $this->logger->error("No company data was parsed from the HTML content using regex");
+        }
+        
+        return $data;
+    }
+    
+    private function saveRawHtml(string $id, string $content, string $type, string $suffix = ''): string
+    {
+        $dataDir = dirname(__DIR__) . "/data/raw/{$type}s";
+        if (!is_dir($dataDir)) {
+            mkdir($dataDir, 0755, true);
+        }
+        
+        $filename = "{$id}{$suffix}.html";
+        $filepath = "{$dataDir}/{$filename}";
+        
+        file_put_contents($filepath, $content);
+        
+        $this->logger->debug("Saved raw HTML for {$type} {$id} to {$filepath}");
         return $filepath;
     }
     
