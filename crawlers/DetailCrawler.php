@@ -97,14 +97,6 @@ class DetailCrawler extends BaseCrawler
             if (!empty($content)) {
                 $companyData = $this->parseCompanyDetail($content);
                 if (!empty($companyData) && count($companyData) >= 3) {
-                    // Use the existing source_url from JSON if available, or construct a generic one
-                    $existingJsonPath = $this->getJsonPath($id, 'company');
-                    if (file_exists($existingJsonPath)) {
-                        $existingData = json_decode(file_get_contents($existingJsonPath), true);
-                        $companyData['source_url'] = $existingData['source_url'] ?? 'https://findbiz.nat.gov.tw';
-                    } else {
-                        $companyData['source_url'] = 'https://findbiz.nat.gov.tw';
-                    }
                     $companyData['crawled_at'] = date('c');
                     
                     $this->logger->info("Successfully regenerated company detail for ID: {$id} from raw HTML");
@@ -201,7 +193,6 @@ class DetailCrawler extends BaseCrawler
                     throw new \Exception("Failed to parse company details - insufficient data extracted");
                 }
 
-                $companyData['source_url'] = $detailUrl;
                 $companyData['crawled_at'] = date('c');
 
                 $this->logger->info("Successfully fetched company detail for ID: {$id}");
@@ -239,14 +230,6 @@ class DetailCrawler extends BaseCrawler
             if (!empty($content)) {
                 $businessData = $this->parseBusinessDetail($content);
                 if (!empty($businessData) && count($businessData) >= 3) {
-                    // Use the existing source_url from JSON if available, or construct a generic one
-                    $existingJsonPath = $this->getJsonPath($id, 'business');
-                    if (file_exists($existingJsonPath)) {
-                        $existingData = json_decode(file_get_contents($existingJsonPath), true);
-                        $businessData['source_url'] = $existingData['source_url'] ?? 'https://findbiz.nat.gov.tw';
-                    } else {
-                        $businessData['source_url'] = 'https://findbiz.nat.gov.tw';
-                    }
                     $businessData['crawled_at'] = date('c');
                     
                     $this->logger->info("Successfully regenerated business detail for ID: {$id} from raw HTML");
@@ -343,7 +326,6 @@ class DetailCrawler extends BaseCrawler
                     throw new \Exception("Failed to parse business details - insufficient data extracted");
                 }
 
-                $businessData['source_url'] = $detailUrl;
                 $businessData['crawled_at'] = date('c');
 
                 $this->logger->info("Successfully fetched business detail for ID: {$id}");
