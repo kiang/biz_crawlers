@@ -16,6 +16,7 @@ function showUsage() {
     echo "  --ids <id1,id2,id3>     Comma-separated list of IDs\n";
     echo "  --file <filename>       File containing IDs (one per line)\n";
     echo "  --from-data <year> <month>      Load IDs from data repository\n";
+    echo "  --from-json             Load all IDs from existing JSON files\n";
     echo "\n";
     echo "Options:\n";
     echo "  --enable-logs           Enable logging (logs disabled by default)\n";
@@ -30,6 +31,7 @@ function showUsage() {
     echo "  php crawl-details.php business --file business_ids.txt --enable-logs\n";
     echo "  php crawl-details.php company --from-data 2025 4 --limit 100\n";
     echo "  php crawl-details.php company --from-data 2025 4 --limit 10 --safe\n";
+    echo "  php crawl-details.php company --from-json --limit 100\n";
     exit(1);
 }
 
@@ -142,6 +144,41 @@ for ($i = 2; $i < $argc; $i++) {
             $ids = array_filter(array_map('trim', file($idsFile)));
             echo "Loaded " . count($ids) . " IDs from {$idsFile}\n";
             $i += 2;
+            break;
+            
+        case '--from-json':
+            // Auto-determine dataType from crawler type
+            $dataType = ($type === 'company') ? 'companies' : 'businesses';
+            
+            $dataDir = __DIR__ . "/data/gcis/{$dataType}/details";
+            if (!is_dir($dataDir)) {
+                echo "Error: Data directory '{$dataDir}' does not exist\n";
+                exit(1);
+            }
+            
+            echo "Scanning for existing JSON files in {$dataDir}...\n";
+            
+            // Scan all subdirectories for JSON files
+            $jsonFiles = [];
+            for ($digit = 0; $digit <= 9; $digit++) {
+                $subDir = "{$dataDir}/{$digit}";
+                if (is_dir($subDir)) {
+                    $files = glob("{$subDir}/*.json");
+                    $jsonFiles = array_merge($jsonFiles, $files);
+                }
+            }
+            
+            // Extract IDs from filenames
+            $ids = [];
+            foreach ($jsonFiles as $jsonFile) {
+                $filename = basename($jsonFile, '.json');
+                if (preg_match('/^\d{8}$/', $filename)) {
+                    $ids[] = $filename;
+                }
+            }
+            
+            sort($ids);
+            echo "Found " . count($ids) . " existing JSON files\n";
             break;
             
         case '--limit':
