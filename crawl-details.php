@@ -219,6 +219,53 @@ if (isset($options['limit'])) {
     $ids = array_slice($ids, 0, $options['limit']);
 }
 
+function commitAndPushData($type) {
+    $detailsPath = __DIR__ . "/data/gcis/{$type}s/details";
+    $currentDir = getcwd();
+    
+    if (!is_dir($detailsPath)) {
+        echo "Details directory not found: {$detailsPath}\n";
+        return false;
+    }
+    
+    chdir($detailsPath);
+    
+    $gitAddOutput = [];
+    $gitAddReturn = 0;
+    exec('git add -A', $gitAddOutput, $gitAddReturn);
+    
+    if ($gitAddReturn !== 0) {
+        echo "Git add failed in {$detailsPath}\n";
+        chdir($currentDir);
+        return false;
+    }
+    
+    $gitCommitOutput = [];
+    $gitCommitReturn = 0;
+    $commitMessage = "Auto-commit: {$type} detail data update " . date('Y-m-d H:i:s');
+    exec("git commit -m \"{$commitMessage}\"", $gitCommitOutput, $gitCommitReturn);
+    
+    if ($gitCommitReturn !== 0) {
+        echo "Git commit failed or no changes to commit in {$detailsPath}\n";
+        chdir($currentDir);
+        return false;
+    }
+    
+    $gitPushOutput = [];
+    $gitPushReturn = 0;
+    exec('git push', $gitPushOutput, $gitPushReturn);
+    
+    if ($gitPushReturn !== 0) {
+        echo "Git push failed in {$detailsPath}\n";
+        chdir($currentDir);
+        return false;
+    }
+    
+    echo "Successfully committed and pushed {$type} detail data\n";
+    chdir($currentDir);
+    return true;
+}
+
 try {
     echo "Starting {$type} detail crawler\n";
     echo "Processing " . count($ids) . " IDs\n";
@@ -268,12 +315,22 @@ try {
         if ($processed % 10 === 0) {
             echo "Progress: {$processed}/" . count($ids) . " processed, {$successful} successful, {$failed} failed\n";
         }
+        
+        // Auto-commit and push every 5000 jobs
+        if ($processed % 5000 === 0) {
+            echo "Reached {$processed} processed items, committing and pushing data...\n";
+            commitAndPushData($type);
+        }
     }
     
     echo "\nCrawl completed!\n";
     echo "Total processed: {$processed}\n";
     echo "Successful: {$successful}\n";
     echo "Failed: {$failed}\n";
+    
+    // Final commit and push when all jobs are completed
+    echo "Committing and pushing final data changes...\n";
+    commitAndPushData($type);
     
 } catch (Exception $e) {
     echo "Error: " . $e->getMessage() . "\n";
