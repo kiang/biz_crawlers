@@ -552,8 +552,13 @@ class DetailCrawler extends BaseCrawler
                                         }
                                     }
                                 }
-                                // If no structured data found, store as raw data
-                                $data[$key] = !empty($businessItems) ? $businessItems : ['raw_data' => $value];
+                                // If no structured data found, split by line breaks and trim each line
+                                if (!empty($businessItems)) {
+                                    $data[$key] = $businessItems;
+                                } else {
+                                    $lines = array_filter(array_map('trim', explode("\n", $value)));
+                                    $data[$key] = $lines;
+                                }
                                 break;
                             default:
                                 if (preg_match('/^(\d+)年(\d+)月(\d+)日$/', $value, $matches)) {
