@@ -45,7 +45,22 @@ class DetailCrawler extends BaseCrawler
         curl_setopt($this->sessionCurl, CURLOPT_FRESH_CONNECT, true);
         curl_setopt($this->sessionCurl, CURLOPT_FORBID_REUSE, true);
         curl_setopt($this->sessionCurl, CURLOPT_COOKIEFILE, '');
-        curl_setopt($this->sessionCurl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.16; rv:84.0) Gecko/20100101 Firefox/84.0');
+        curl_setopt($this->sessionCurl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        curl_setopt($this->sessionCurl, CURLOPT_HTTPHEADER, [
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language: zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Encoding: gzip, deflate, br',
+            'DNT: 1',
+            'Connection: keep-alive',
+            'Upgrade-Insecure-Requests: 1',
+            'Sec-Fetch-Dest: document',
+            'Sec-Fetch-Mode: navigate',
+            'Sec-Fetch-Site: none',
+            'Sec-Fetch-User: ?1',
+            'sec-ch-ua: "Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'sec-ch-ua-mobile: ?0',
+            'sec-ch-ua-platform: "Windows"'
+        ]);
         curl_setopt($this->sessionCurl, CURLOPT_DNS_USE_GLOBAL_CACHE, false);
         curl_setopt($this->sessionCurl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
         curl_setopt($this->sessionCurl, CURLOPT_TIMEOUT, 30);
