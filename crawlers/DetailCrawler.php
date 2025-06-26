@@ -505,8 +505,10 @@ class DetailCrawler extends BaseCrawler
                                 }
                                 break;
                             case '公司所在地':
+                            case '地址':
                             case '登記現況':
                             case '分公司所在地':
+                            case '負責人姓名':
                                 $pos = strpos($value, chr(13));
                                 if (false !== $pos) {
                                     $value = trim(substr($value, 0, $pos));
@@ -701,15 +703,102 @@ class DetailCrawler extends BaseCrawler
                     $key = trim($tds->item(0)->nodeValue);
                     $value = trim($tds->item(1)->nodeValue);
 
-                    // Parse dates
-                    if (preg_match('/^(\d+)年(\d+)月(\d+)日$/', $value, $matches)) {
-                        $data[$key] = [
-                            'year' => intval($matches[1]) + 1911,
-                            'month' => intval($matches[2]),
-                            'day' => intval($matches[3])
-                        ];
-                    } else {
-                        $data[$key] = $value;
+                    switch ($key) {
+                        case '商業統一編號':
+                            // Skip 統一編號 as it's duplicated with id field
+                            break;
+                        case '商業名稱':
+                            // Extract business name and clean unwanted content
+                            $rawHtml = $doc->saveHTML($tds->item(1));
+                            $pos = strpos($rawHtml, '<span id="linkMoea">');
+                            if(false !== $pos) {
+                                $rawHtml = substr($rawHtml, 0, $pos);
+                            }
+                            // Remove all span and div elements and their content completely first
+                            $cleanHtml = strip_tags(preg_replace('/<span[^>]*>.*?<\/span>/is', '', $rawHtml));
+                            
+                            // Split by <br> tags to get separate names
+                            $parts = preg_split('/\n/i', $cleanHtml);
+                            
+                            $theNames = [];
+                            foreach ($parts as $part) {
+                                // Remove remaining HTML tags
+                                $cleanName = trim($part);
+                                
+                                // Only keep non-empty names that look like actual names
+                                if (!empty($cleanName) && strlen($cleanName) > 2) {
+                                    $theNames[] = $cleanName;
+                                }
+                            }
+                            
+                            // If we found names, use them; prefer multiple names over single name
+                            if (!empty($theNames)) {
+                                if (!isset($data[$key]) || (is_string($data[$key]) && count($theNames) > 1)) {
+                                    $data[$key] = count($theNames) > 1 ? $theNames : $theNames[0];
+                                }
+                            }
+                            break;
+                        case '負責人姓名':
+                            // Parse the nested table structure for responsible person name and investment
+                            $cellHtml = $doc->saveHTML($tds->item(1));
+                            
+                            // Look for table structure within the cell
+                            if (preg_match('/<table[^>]*>(.*?)<\/table>/is', $cellHtml, $tableMatch)) {
+                                // Parse the inner table to extract name and investment amount
+                                $innerDoc = new \DOMDocument();
+                                @$innerDoc->loadHTML('<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body><table>' . $tableMatch[1] . '</table></body></html>');
+                                
+                                $innerTable = $innerDoc->getElementsByTagName('table')->item(0);
+                                if ($innerTable) {
+                                    $innerTbody = $innerTable->getElementsByTagName('tbody')->item(0);
+                                    $innerTr = $innerTbody ? $innerTbody->getElementsByTagName('tr')->item(0) : $innerTable->getElementsByTagName('tr')->item(0);
+                                    
+                                    if ($innerTr) {
+                                        $innerTds = $innerTr->getElementsByTagName('td');
+                                        if ($innerTds->length >= 2) {
+                                            // First column: person name
+                                            $personName = trim($innerTds->item(0)->nodeValue);
+                                            
+                                            // Second column: investment amount info  
+                                            $investmentInfo = trim($innerTds->item(1)->nodeValue);
+                                            
+                                            // Extract amount from "出資額(元):123456" format
+                                            $amount = 0;
+                                            if (preg_match('/出資額\(元\):(\d+)/', $investmentInfo, $matches)) {
+                                                $amount = intval($matches[1]);
+                                            }
+                                            
+                                            // Set the responsible person name
+                                            if (!empty($personName)) {
+                                                $data['負責人姓名'] = $personName;
+                                            }
+                                            
+                                            // Create or append to investment amount array
+                                            if (!isset($data['出資額(元)'])) {
+                                                $data['出資額(元)'] = [];
+                                            }
+                                            if (!empty($personName)) {
+                                                $data['出資額(元)'][] = [$personName => $amount];
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Fallback to simple text parsing if no table structure
+                                $data[$key] = trim($tds->item(1)->nodeValue);
+                            }
+                            break;
+                        default:
+                            // Parse dates
+                            if (preg_match('/^(\d+)年(\d+)月(\d+)日$/', $value, $matches)) {
+                                $data[$key] = [
+                                    'year' => intval($matches[1]) + 1911,
+                                    'month' => intval($matches[2]),
+                                    'day' => intval($matches[3])
+                                ];
+                            } else {
+                                $data[$key] = $value;
+                            }
                     }
                 }
             }
