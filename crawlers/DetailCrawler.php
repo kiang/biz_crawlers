@@ -89,6 +89,32 @@ class DetailCrawler extends BaseCrawler
 
     public function fetchCompanyDetail(string $id): ?array
     {
+        // Check if we have existing raw HTML file to regenerate from
+        $rawHtmlPath = $this->getRawHtmlPath($id, 'company', '_detail_page');
+        if (file_exists($rawHtmlPath)) {
+            $this->logger->info("Found existing raw HTML for company {$id}, regenerating JSON from raw file");
+            $content = file_get_contents($rawHtmlPath);
+            if (!empty($content)) {
+                $companyData = $this->parseCompanyDetail($content);
+                if (!empty($companyData) && count($companyData) >= 3) {
+                    // Use the existing source_url from JSON if available, or construct a generic one
+                    $existingJsonPath = $this->getJsonPath($id, 'company');
+                    if (file_exists($existingJsonPath)) {
+                        $existingData = json_decode(file_get_contents($existingJsonPath), true);
+                        $companyData['source_url'] = $existingData['source_url'] ?? 'https://findbiz.nat.gov.tw';
+                    } else {
+                        $companyData['source_url'] = 'https://findbiz.nat.gov.tw';
+                    }
+                    $companyData['crawled_at'] = date('c');
+                    
+                    $this->logger->info("Successfully regenerated company detail for ID: {$id} from raw HTML");
+                    return $companyData;
+                } else {
+                    $this->logger->warning("Failed to parse existing raw HTML for company {$id}");
+                }
+            }
+        }
+
         // Check if detail was crawled within last 24 hours
         if ($this->isRecentlyCrawled($id, 'company')) {
             $this->logger->info("Skipping company {$id} - already crawled within 24 hours");
@@ -205,6 +231,32 @@ class DetailCrawler extends BaseCrawler
 
     public function fetchBusinessDetail(string $id): ?array
     {
+        // Check if we have existing raw HTML file to regenerate from
+        $rawHtmlPath = $this->getRawHtmlPath($id, 'business', '_detail_page');
+        if (file_exists($rawHtmlPath)) {
+            $this->logger->info("Found existing raw HTML for business {$id}, regenerating JSON from raw file");
+            $content = file_get_contents($rawHtmlPath);
+            if (!empty($content)) {
+                $businessData = $this->parseBusinessDetail($content);
+                if (!empty($businessData) && count($businessData) >= 3) {
+                    // Use the existing source_url from JSON if available, or construct a generic one
+                    $existingJsonPath = $this->getJsonPath($id, 'business');
+                    if (file_exists($existingJsonPath)) {
+                        $existingData = json_decode(file_get_contents($existingJsonPath), true);
+                        $businessData['source_url'] = $existingData['source_url'] ?? 'https://findbiz.nat.gov.tw';
+                    } else {
+                        $businessData['source_url'] = 'https://findbiz.nat.gov.tw';
+                    }
+                    $businessData['crawled_at'] = date('c');
+                    
+                    $this->logger->info("Successfully regenerated business detail for ID: {$id} from raw HTML");
+                    return $businessData;
+                } else {
+                    $this->logger->warning("Failed to parse existing raw HTML for business {$id}");
+                }
+            }
+        }
+
         // Check if detail was crawled within last 24 hours
         if ($this->isRecentlyCrawled($id, 'business')) {
             $this->logger->info("Skipping business {$id} - already crawled within 24 hours");
@@ -436,6 +488,8 @@ class DetailCrawler extends BaseCrawler
 
                         switch ($key) {
                             case '統一編號':
+                                // Skip 統一編號 as it's duplicated with id field
+                                break;
                             case '公司名稱':
                             case '公司所在地':
                             case '登記現況':
@@ -476,8 +530,8 @@ class DetailCrawler extends BaseCrawler
                                             $description = implode(' ', $parts);
 
                                             $businessItems[] = [
-                                                'code' => $code,
-                                                'description' => trim($description)
+                                                $code,
+                                                trim($description)
                                             ];
                                         }
                                     }
@@ -508,7 +562,8 @@ class DetailCrawler extends BaseCrawler
         if ($shareDiv) {
             $shareholders = [];
             $tables = $shareDiv->getElementsByTagName('table');
-            $table = $tables->length > 0 ? $tables->item(0) : null;
+            // Skip first empty table, use second table which contains the actual data
+            $table = $tables->length > 1 ? $tables->item(1) : ($tables->length > 0 ? $tables->item(0) : null);
             if ($table) {
                 $tbody = $table->getElementsByTagName('tbody')->item(0);
                 if ($tbody) {
@@ -823,7 +878,6 @@ class DetailCrawler extends BaseCrawler
 
         // Define field mappings from the table
         $fields = [
-            '統一編號' => '',
             '登記現況' => '',
             '公司名稱' => '',
             '章程所訂外文公司名稱' => '',
@@ -855,7 +909,7 @@ class DetailCrawler extends BaseCrawler
 
                             if (!empty($key) && array_key_exists($key, $fields)) {
                                 // Apply additional trimming for key fields
-                                if (in_array($key, ['統一編號', '登記現況', '公司名稱', '公司所在地'])) {
+                                if (in_array($key, ['登記現況', '公司名稱', '公司所在地'])) {
                                     $value = $this->trimKeyField($value);
                                 }
 
@@ -926,6 +980,22 @@ class DetailCrawler extends BaseCrawler
         $hoursDiff = ($currentTime - $fileModTime) / 3600;
 
         return $hoursDiff < 24;
+    }
+
+    private function getRawHtmlPath(string $id, string $type, string $suffix = ''): string
+    {
+        $dataDir = dirname(__DIR__) . "/data/raw/{$type}s";
+        $filename = "{$id}{$suffix}.html";
+        return "{$dataDir}/{$filename}";
+    }
+
+    private function getJsonPath(string $id, string $type): string
+    {
+        $pluralType = $type === 'company' ? 'companies' : 'businesses';
+        $id = str_pad($id, 8, '0', STR_PAD_LEFT);
+        $firstChar = substr($id, 0, 1);
+        $dataDir = dirname(__DIR__) . "/data/gcis/{$pluralType}/details/{$firstChar}";
+        return "{$dataDir}/{$id}.json";
     }
 
     private function closeSession(): void
