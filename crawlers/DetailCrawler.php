@@ -115,7 +115,7 @@ class DetailCrawler extends BaseCrawler
             }
         }
 
-        // Check if detail was crawled within last 24 hours
+        // Check if detail was crawled within last 24 hours (only if no raw HTML exists)
         if ($this->isRecentlyCrawled($id, 'company')) {
             $this->logger->info("Skipping company {$id} - already crawled within 24 hours");
             return null;
@@ -257,7 +257,7 @@ class DetailCrawler extends BaseCrawler
             }
         }
 
-        // Check if detail was crawled within last 24 hours
+        // Check if detail was crawled within last 24 hours (only if no raw HTML exists)
         if ($this->isRecentlyCrawled($id, 'business')) {
             $this->logger->info("Skipping business {$id} - already crawled within 24 hours");
             return null;
@@ -491,8 +491,40 @@ class DetailCrawler extends BaseCrawler
                                 // Skip 統一編號 as it's duplicated with id field
                                 break;
                             case '公司名稱':
+                            case '在中華民國境內負責人':
+                                // Extract both Chinese and English company names
+                                $rawHtml = $doc->saveHTML($tds->item(1));
+                                $pos = strpos($rawHtml, '<span id="linkMoea">');
+                                if(false !== $pos) {
+                                    $rawHtml = substr($rawHtml, 0, $pos);
+                                }
+                                // Remove all span and div elements and their content completely first
+                                $cleanHtml = strip_tags(preg_replace('/<span[^>]*>.*?<\/span>/is', '', $rawHtml));
+                                
+                                // Split by <br> tags to get separate names
+                                $parts = preg_split('/\n/i', $cleanHtml);
+                                
+                                $theNames = [];
+                                foreach ($parts as $part) {
+                                    // Remove remaining HTML tags
+                                    $cleanName = trim($part);
+                                    
+                                    // Only keep non-empty names that look like actual company names
+                                    if (!empty($cleanName) && strlen($cleanName) > 2) {
+                                        $theNames[] = $cleanName;
+                                    }
+                                }
+                                
+                                // If we found names, use them; prefer multiple names over single name
+                                if (!empty($theNames)) {
+                                    if (!isset($data[$key]) || (is_string($data[$key]) && count($theNames) > 1)) {
+                                        $data[$key] = count($theNames) > 1 ? $theNames : $theNames[0];
+                                    }
+                                }
+                                break;
                             case '公司所在地':
                             case '登記現況':
+                            case '分公司所在地':
                                 $pos = strpos($value, chr(13));
                                 if (false !== $pos) {
                                     $value = trim(substr($value, 0, $pos));
@@ -865,6 +897,11 @@ class DetailCrawler extends BaseCrawler
 
     private function cleanStringForJson(string $value): string
     {
+        // Ensure proper UTF-8 encoding
+        if (!mb_check_encoding($value, 'UTF-8')) {
+            $value = mb_convert_encoding($value, 'UTF-8', 'auto');
+        }
+        
         // Only remove control characters that actually break JSON encoding
         // Avoid any encoding conversion that might corrupt Chinese characters
         $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value);
