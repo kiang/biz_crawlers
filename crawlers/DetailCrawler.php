@@ -98,7 +98,7 @@ class DetailCrawler extends BaseCrawler
                 $companyData = $this->parseCompanyDetail($content);
                 if (!empty($companyData) && count($companyData) >= 3) {
                     $companyData['crawled_at'] = date('c');
-                    
+
                     $this->logger->info("Successfully regenerated company detail for ID: {$id} from raw HTML");
                     return $companyData;
                 } else {
@@ -231,7 +231,7 @@ class DetailCrawler extends BaseCrawler
                 $businessData = $this->parseBusinessDetail($content);
                 if (!empty($businessData) && count($businessData) >= 3) {
                     $businessData['crawled_at'] = date('c');
-                    
+
                     $this->logger->info("Successfully regenerated business detail for ID: {$id} from raw HTML");
                     return $businessData;
                 } else {
@@ -477,26 +477,26 @@ class DetailCrawler extends BaseCrawler
                                 // Extract both Chinese and English company names
                                 $rawHtml = $doc->saveHTML($tds->item(1));
                                 $pos = strpos($rawHtml, '<span id="linkMoea">');
-                                if(false !== $pos) {
+                                if (false !== $pos) {
                                     $rawHtml = substr($rawHtml, 0, $pos);
                                 }
                                 // Remove all span and div elements and their content completely first
                                 $cleanHtml = strip_tags(preg_replace('/<span[^>]*>.*?<\/span>/is', '', $rawHtml));
-                                
+
                                 // Split by <br> tags to get separate names
                                 $parts = preg_split('/\n/i', $cleanHtml);
-                                
+
                                 $theNames = [];
                                 foreach ($parts as $part) {
                                     // Remove remaining HTML tags
                                     $cleanName = trim($part);
-                                    
+
                                     // Only keep non-empty names that look like actual company names
                                     if (!empty($cleanName) && strlen($cleanName) > 2) {
                                         $theNames[] = $cleanName;
                                     }
                                 }
-                                
+
                                 // If we found names, use them; prefer multiple names over single name
                                 if (!empty($theNames)) {
                                     if (!isset($data[$key]) || (is_string($data[$key]) && count($theNames) > 1)) {
@@ -596,7 +596,7 @@ class DetailCrawler extends BaseCrawler
                         // Parse 所代表法人 field to extract company ID and name if it's a link
                         $legalEntityHtml = $doc->saveHTML($tds->item(3));
                         $legalEntityValue = trim($tds->item(3)->nodeValue);
-                        
+
                         // Check if there's a link with queryCmpy function containing company ID
                         if (preg_match("/queryCmpy\('([^']+)','(\d+)',/", $legalEntityHtml, $matches)) {
                             $companyName = $matches[1];
@@ -707,30 +707,42 @@ class DetailCrawler extends BaseCrawler
                         case '商業統一編號':
                             // Skip 統一編號 as it's duplicated with id field
                             break;
+                        case '地址':
+                        case '登記現況':
+                            $pos = strpos($value, chr(13));
+                            if (false !== $pos) {
+                                $value = trim(substr($value, 0, $pos));
+                            } else {
+                                $value = trim($value);
+                            }
+                            $value = preg_replace('/\s/', '', $value);
+                            $value = str_replace(html_entity_decode('&nbsp;'), '', $value);
+                            $data[$key] = $value;
+                            break;
                         case '商業名稱':
                             // Extract business name and clean unwanted content
                             $rawHtml = $doc->saveHTML($tds->item(1));
                             $pos = strpos($rawHtml, '<span id="linkMoea">');
-                            if(false !== $pos) {
+                            if (false !== $pos) {
                                 $rawHtml = substr($rawHtml, 0, $pos);
                             }
                             // Remove all span and div elements and their content completely first
                             $cleanHtml = strip_tags(preg_replace('/<span[^>]*>.*?<\/span>/is', '', $rawHtml));
-                            
+
                             // Split by <br> tags to get separate names
                             $parts = preg_split('/\n/i', $cleanHtml);
-                            
+
                             $theNames = [];
                             foreach ($parts as $part) {
                                 // Remove remaining HTML tags
                                 $cleanName = trim($part);
-                                
+
                                 // Only keep non-empty names that look like actual names
                                 if (!empty($cleanName) && strlen($cleanName) > 2) {
                                     $theNames[] = $cleanName;
                                 }
                             }
-                            
+
                             // If we found names, use them; prefer multiple names over single name
                             if (!empty($theNames)) {
                                 if (!isset($data[$key]) || (is_string($data[$key]) && count($theNames) > 1)) {
@@ -741,38 +753,38 @@ class DetailCrawler extends BaseCrawler
                         case '負責人姓名':
                             // Parse the nested table structure for responsible person name and investment
                             $cellHtml = $doc->saveHTML($tds->item(1));
-                            
+
                             // Look for table structure within the cell
                             if (preg_match('/<table[^>]*>(.*?)<\/table>/is', $cellHtml, $tableMatch)) {
                                 // Parse the inner table to extract name and investment amount
                                 $innerDoc = new \DOMDocument();
                                 @$innerDoc->loadHTML('<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body><table>' . $tableMatch[1] . '</table></body></html>');
-                                
+
                                 $innerTable = $innerDoc->getElementsByTagName('table')->item(0);
                                 if ($innerTable) {
                                     $innerTbody = $innerTable->getElementsByTagName('tbody')->item(0);
                                     $innerTr = $innerTbody ? $innerTbody->getElementsByTagName('tr')->item(0) : $innerTable->getElementsByTagName('tr')->item(0);
-                                    
+
                                     if ($innerTr) {
                                         $innerTds = $innerTr->getElementsByTagName('td');
                                         if ($innerTds->length >= 2) {
                                             // First column: person name
                                             $personName = trim($innerTds->item(0)->nodeValue);
-                                            
+
                                             // Second column: investment amount info  
                                             $investmentInfo = trim($innerTds->item(1)->nodeValue);
-                                            
+
                                             // Extract amount from "出資額(元):123456" format
                                             $amount = 0;
                                             if (preg_match('/出資額\(元\):(\d+)/', $investmentInfo, $matches)) {
                                                 $amount = intval($matches[1]);
                                             }
-                                            
+
                                             // Set the responsible person name
                                             if (!empty($personName)) {
                                                 $data['負責人姓名'] = $personName;
                                             }
-                                            
+
                                             // Create or append to investment amount array
                                             if (!isset($data['出資額(元)'])) {
                                                 $data['出資額(元)'] = [];
@@ -788,6 +800,45 @@ class DetailCrawler extends BaseCrawler
                                 $data[$key] = trim($tds->item(1)->nodeValue);
                             }
                             break;
+                        case '營業項目':
+                                // Parse business data by finding code positions and extracting sections
+                                $businessItems = [];
+
+                                // Find all business code positions in the text
+                                if (preg_match_all('/([A-Z][A-Z0-9]\d{5})/', $value, $matches, PREG_OFFSET_CAPTURE)) {
+                                    $codes = $matches[1];
+
+                                    for ($i = 0; $i < count($codes); $i++) {
+                                        $code = $codes[$i][0];
+                                        $startPos = $codes[$i][1];
+
+                                        // Find end position (next code or end of text)
+                                        $endPos = isset($codes[$i + 1]) ? $codes[$i + 1][1] : strlen($value);
+
+                                        // Extract the section from start to end
+                                        $section = substr($value, $startPos, $endPos - $startPos);
+
+                                        // Split by whitespace characters (space, newline, tab, etc.)
+                                        $parts = preg_split('/\s+/', trim($section), -1, PREG_SPLIT_NO_EMPTY);
+
+                                        // First part should be the code, rest is description
+                                        if (count($parts) > 1) {
+                                            array_shift($parts); // Remove the code part
+                                            $description = implode(' ', $parts);
+                                            
+                                            // Remove trailing sorting numbers (e.g., "餐館業 2" -> "餐館業")
+                                            $description = preg_replace('/\s+\d+$/', '', $description);
+
+                                            $businessItems[] = [
+                                                $code,
+                                                trim($description)
+                                            ];
+                                        }
+                                    }
+                                }
+                                // If no structured data found, store as raw data
+                                $data[$key] = !empty($businessItems) ? $businessItems : ['raw_data' => $value];
+                                break;
                         default:
                             // Parse dates
                             if (preg_match('/^(\d+)年(\d+)月(\d+)日$/', $value, $matches)) {
@@ -816,7 +867,7 @@ class DetailCrawler extends BaseCrawler
 
         // Ensure ID is 8 digits with leading zeros
         $id = str_pad($id, 8, '0', STR_PAD_LEFT);
-        
+
         // Get first character for directory organization
         $firstChar = substr($id, 0, 1);
         $dataDir = dirname(__DIR__) . '/data/gcis/companies/details/' . $firstChar;
@@ -829,7 +880,7 @@ class DetailCrawler extends BaseCrawler
 
         // Clean data recursively to ensure JSON encoding works
         $cleanData = $this->cleanDataForJson($data);
-        
+
         // Add the id field to match existing structure
         $cleanData['id'] = $id;
 
@@ -874,7 +925,7 @@ class DetailCrawler extends BaseCrawler
     {
         // Ensure ID is 8 digits with leading zeros
         $id = str_pad($id, 8, '0', STR_PAD_LEFT);
-        
+
         // Get first character for directory organization
         $firstChar = substr($id, 0, 1);
         $dataDir = dirname(__DIR__) . '/data/gcis/businesses/details/' . $firstChar;
@@ -989,7 +1040,7 @@ class DetailCrawler extends BaseCrawler
         if (!mb_check_encoding($value, 'UTF-8')) {
             $value = mb_convert_encoding($value, 'UTF-8', 'auto');
         }
-        
+
         // Only remove control characters that actually break JSON encoding
         // Avoid any encoding conversion that might corrupt Chinese characters
         $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value);
