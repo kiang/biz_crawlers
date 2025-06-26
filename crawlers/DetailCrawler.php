@@ -591,11 +591,28 @@ class DetailCrawler extends BaseCrawler
                             continue;
                         }
 
+                        // Parse 所代表法人 field to extract company ID and name if it's a link
+                        $legalEntityHtml = $doc->saveHTML($tds->item(3));
+                        $legalEntityValue = trim($tds->item(3)->nodeValue);
+                        
+                        // Check if there's a link with queryCmpy function containing company ID
+                        if (preg_match("/queryCmpy\('([^']+)','(\d+)',/", $legalEntityHtml, $matches)) {
+                            $companyName = $matches[1];
+                            $companyId = $matches[2];
+                            $legalEntityValue = [$companyId, $companyName];
+                        } elseif (!empty($legalEntityValue)) {
+                            // Keep as string if not empty but no company ID found
+                            $legalEntityValue = $legalEntityValue;
+                        } else {
+                            // Empty string for empty values
+                            $legalEntityValue = '';
+                        }
+
                         $shareholder = [
                             '序號' => trim($tds->item(0)->nodeValue),
                             '職稱' => trim($tds->item(1)->nodeValue),
                             '姓名' => trim($tds->item(2)->nodeValue),
-                            '所代表法人' => trim($tds->item(3)->nodeValue),
+                            '所代表法人' => $legalEntityValue,
                             '出資額' => trim($tds->item(4)->nodeValue)
                         ];
 
