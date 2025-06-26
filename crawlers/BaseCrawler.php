@@ -267,7 +267,10 @@ abstract class BaseCrawler
         $filename = "ids_{$type}_{$year}_{$month}.txt";
         $filepath = "{$yearMonthDir}/{$filename}";
 
-        file_put_contents($filepath, implode("\n", $ids));
+        // Only create the file if there are IDs to save
+        if (!empty($ids)) {
+            file_put_contents($filepath, implode("\n", $ids));
+        }
 
         return $filepath;
     }
