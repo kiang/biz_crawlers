@@ -490,8 +490,7 @@ class DetailCrawler extends BaseCrawler
                                     $data[$key] = [
                                         'year' => intval($matches[1]) + 1911,
                                         'month' => intval($matches[2]),
-                                        'day' => intval($matches[3]),
-                                        'formatted' => $value
+                                        'day' => intval($matches[3])
                                     ];
                                 } else {
                                     $data[$key] = $value;
@@ -524,18 +523,18 @@ class DetailCrawler extends BaseCrawler
                         }
 
                         $shareholder = [
-                            'sequence' => trim($tds->item(0)->nodeValue),
-                            'position' => trim($tds->item(1)->nodeValue),
-                            'name' => trim($tds->item(2)->nodeValue),
-                            'representative' => trim($tds->item(3)->nodeValue),
-                            'investment' => trim($tds->item(4)->nodeValue)
+                            '序號' => trim($tds->item(0)->nodeValue),
+                            '職稱' => trim($tds->item(1)->nodeValue),
+                            '姓名' => trim($tds->item(2)->nodeValue),
+                            '所代表法人' => trim($tds->item(3)->nodeValue),
+                            '出資額' => trim($tds->item(4)->nodeValue)
                         ];
 
                         $shareholders[] = $shareholder;
                     }
                 }
             }
-            $data['shareholders'] = $shareholders;
+            $data['董監事名單'] = $shareholders;
         }
 
         // Parse managers
@@ -568,16 +567,16 @@ class DetailCrawler extends BaseCrawler
                         }
 
                         $manager = [
-                            'sequence' => trim($tds->item(0)->nodeValue),
-                            'name' => trim($tds->item(1)->nodeValue),
-                            'appoint_date' => $parsedDate
+                            '序號' => trim($tds->item(0)->nodeValue),
+                            '姓名' => trim($tds->item(1)->nodeValue),
+                            '就任日期' => $parsedDate
                         ];
 
                         $managers[] = $manager;
                     }
                 }
             }
-            $data['managers'] = $managers;
+            $data['經理人名單'] = $managers;
         }
 
         // Log final parsing results
@@ -621,8 +620,7 @@ class DetailCrawler extends BaseCrawler
                         $data[$key] = [
                             'year' => intval($matches[1]) + 1911,
                             'month' => intval($matches[2]),
-                            'day' => intval($matches[3]),
-                            'formatted' => $value
+                            'day' => intval($matches[3])
                         ];
                     } else {
                         $data[$key] = $value;
@@ -641,7 +639,12 @@ class DetailCrawler extends BaseCrawler
             $this->logger->error("saveCompanyDetail received empty data for {$id}");
         }
 
-        $dataDir = dirname(__DIR__) . '/data/gcis/companies/details';
+        // Ensure ID is 8 digits with leading zeros
+        $id = str_pad($id, 8, '0', STR_PAD_LEFT);
+        
+        // Get first character for directory organization
+        $firstChar = substr($id, 0, 1);
+        $dataDir = dirname(__DIR__) . '/data/gcis/companies/details/' . $firstChar;
         if (!is_dir($dataDir)) {
             mkdir($dataDir, 0755, true);
         }
@@ -651,16 +654,12 @@ class DetailCrawler extends BaseCrawler
 
         // Clean data recursively to ensure JSON encoding works
         $cleanData = $this->cleanDataForJson($data);
+        
+        // Add the id field to match existing structure
+        $cleanData['id'] = $id;
 
-        $saveData = [
-            'metadata' => [
-                'id' => $id,
-                'type' => 'company_detail',
-                'crawled_at' => date('c'),
-                'source' => 'findbiz.nat.gov.tw'
-            ],
-            'data' => $cleanData
-        ];
+        // Use flat structure to match existing JSON files (no metadata wrapper)
+        $saveData = $cleanData;
 
         // Try encoding with different options to handle UTF-8 issues
         $jsonData = json_encode($saveData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -698,7 +697,12 @@ class DetailCrawler extends BaseCrawler
 
     public function saveBusinessDetail(string $id, array $data): string
     {
-        $dataDir = dirname(__DIR__) . '/data/gcis/businesses/details';
+        // Ensure ID is 8 digits with leading zeros
+        $id = str_pad($id, 8, '0', STR_PAD_LEFT);
+        
+        // Get first character for directory organization
+        $firstChar = substr($id, 0, 1);
+        $dataDir = dirname(__DIR__) . '/data/gcis/businesses/details/' . $firstChar;
         if (!is_dir($dataDir)) {
             mkdir($dataDir, 0755, true);
         }
@@ -706,15 +710,11 @@ class DetailCrawler extends BaseCrawler
         $filename = "{$id}.json";
         $filepath = "{$dataDir}/{$filename}";
 
-        $saveData = [
-            'metadata' => [
-                'id' => $id,
-                'type' => 'business_detail',
-                'crawled_at' => date('c'),
-                'source' => 'findbiz.nat.gov.tw'
-            ],
-            'data' => $data
-        ];
+        // Add the id field to match existing structure
+        $data['id'] = $id;
+
+        // Use flat structure to match existing JSON files (no metadata wrapper)
+        $saveData = $data;
 
         file_put_contents($filepath, json_encode($saveData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
@@ -770,10 +770,7 @@ class DetailCrawler extends BaseCrawler
                 $description = trim($parts[$i + 1]);
 
                 if (!empty($code) && !empty($description)) {
-                    $items[] = [
-                        'code' => $code,
-                        'description' => $description
-                    ];
+                    $items[] = [$code, $description];
                 }
             }
         }
@@ -867,8 +864,7 @@ class DetailCrawler extends BaseCrawler
                                     $data[$key] = [
                                         'year' => intval($matches[1]) + 1911,
                                         'month' => intval($matches[2]),
-                                        'day' => intval($matches[3]),
-                                        'formatted' => $value
+                                        'day' => intval($matches[3])
                                     ];
                                 } elseif ($key === '所營事業資料') {
                                     $data[$key] = $this->parseBusinessItems($value);
