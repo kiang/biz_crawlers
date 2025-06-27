@@ -220,7 +220,8 @@ if (isset($options['limit'])) {
 }
 
 function commitAndPushData($type) {
-    $detailsPath = __DIR__ . "/data/gcis/{$type}s/details";
+    $dataType = ($type === 'company') ? 'companies' : 'businesses';
+    $detailsPath = __DIR__ . "/data/gcis/{$dataType}/details";
     $currentDir = getcwd();
     
     if (!is_dir($detailsPath)) {
