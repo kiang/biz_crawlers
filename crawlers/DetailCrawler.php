@@ -1178,12 +1178,10 @@ class DetailCrawler extends BaseCrawler
 
         $data = json_decode($jsonContent, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
-            // If JSON is invalid, fall back to file modification time
-            $this->logger->warning("Invalid JSON in {$filepath}, falling back to file modification time");
-            $fileModTime = filemtime($filepath);
-            $currentTime = time();
-            $hoursDiff = ($currentTime - $fileModTime) / 3600;
-            return $hoursDiff < 24;
+            // If JSON is invalid, delete the file and return false to trigger re-crawl
+            $this->logger->warning("Invalid JSON in {$filepath}, deleting corrupted file: " . json_last_error_msg());
+            unlink($filepath);
+            return false;
         }
 
         // Check if crawled_at field exists and is valid
