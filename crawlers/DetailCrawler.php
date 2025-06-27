@@ -1147,7 +1147,8 @@ class DetailCrawler extends BaseCrawler
 
     private function saveRawHtml(string $id, string $content, string $type, string $suffix = ''): string
     {
-        $dataDir = dirname(__DIR__) . "/data/raw/{$type}s";
+        $pluralType = $type === 'company' ? 'companies' : 'businesses';
+        $dataDir = dirname(__DIR__) . "/data/raw/{$pluralType}";
         if (!is_dir($dataDir)) {
             mkdir($dataDir, 0755, true);
         }
@@ -1180,7 +1181,8 @@ class DetailCrawler extends BaseCrawler
 
     private function getRawHtmlPath(string $id, string $type, string $suffix = ''): string
     {
-        $dataDir = dirname(__DIR__) . "/data/raw/{$type}s";
+        $pluralType = $type === 'company' ? 'companies' : 'businesses';
+        $dataDir = dirname(__DIR__) . "/data/raw/{$pluralType}";
         $filename = "{$id}{$suffix}.html";
         return "{$dataDir}/{$filename}";
     }
