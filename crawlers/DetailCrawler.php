@@ -1164,14 +1164,39 @@ class DetailCrawler extends BaseCrawler
 
     private function isRecentlyCrawled(string $id, string $type): bool
     {
-        $pluralType = $type === 'company' ? 'companies' : 'businesses';
-        $dataDir = dirname(__DIR__) . "/data/gcis/{$pluralType}/details";
-        $filepath = "{$dataDir}/{$id}.json";
+        $filepath = $this->getJsonPath($id, $type);
 
         if (!file_exists($filepath)) {
             return false;
         }
 
+        // Try to read and parse the JSON file to check crawled_at field
+        $jsonContent = file_get_contents($filepath);
+        if ($jsonContent === false) {
+            return false;
+        }
+
+        $data = json_decode($jsonContent, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            // If JSON is invalid, fall back to file modification time
+            $this->logger->warning("Invalid JSON in {$filepath}, falling back to file modification time");
+            $fileModTime = filemtime($filepath);
+            $currentTime = time();
+            $hoursDiff = ($currentTime - $fileModTime) / 3600;
+            return $hoursDiff < 24;
+        }
+
+        // Check if crawled_at field exists and is valid
+        if (isset($data['crawled_at']) && !empty($data['crawled_at'])) {
+            $crawledTime = strtotime($data['crawled_at']);
+            if ($crawledTime !== false) {
+                $currentTime = time();
+                $hoursDiff = ($currentTime - $crawledTime) / 3600;
+                return $hoursDiff < 24;
+            }
+        }
+
+        // If crawled_at field doesn't exist or is invalid, fall back to file modification time
         $fileModTime = filemtime($filepath);
         $currentTime = time();
         $hoursDiff = ($currentTime - $fileModTime) / 3600;
