@@ -521,6 +521,7 @@ class DetailCrawler extends BaseCrawler
                                 break;
                             case '公司所在地':
                             case '地址':
+                            case '辦事處所在地':
                             case '登記現況':
                             case '分公司所在地':
                             case '負責人姓名':
