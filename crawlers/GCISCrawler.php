@@ -485,6 +485,22 @@ class GCISCrawler extends BaseCrawler
 
     public function saveIdList(string $type, int $year, int $month, array $ids): string
     {
-        return $this->saveIdsToDataRepository('gcis', $type, $year, $month, $ids);
+        $rocYear = $this->convertToRocYear($year);
+        // Create directory with ROC year but filename with original year for consistency
+        $dataDir = dirname(__DIR__) . '/data';
+        $sourceDir = "{$dataDir}/gcis/{$type}";
+        $yearMonthDir = sprintf("%s/%03d-%02d", $sourceDir, $rocYear, $month);
+        
+        if (!is_dir($yearMonthDir)) {
+            mkdir($yearMonthDir, 0755, true);
+        }
+        
+        $filename = "ids_{$type}_{$year}_{$month}.txt";
+        $filepath = "{$yearMonthDir}/{$filename}";
+        
+        // Always create the file, even if empty
+        file_put_contents($filepath, implode("\n", $ids));
+        
+        return $filepath;
     }
 }

@@ -5,6 +5,22 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 use BizData\Crawlers\CrawlerFactory;
 
+function convertToRocYear(int $year): int
+{
+    // If year is already in ROC format (reasonable range: 100-150)
+    if ($year >= 100 && $year <= 150) {
+        return $year;
+    }
+
+    // If year is in Western format (2000+), convert to ROC
+    if ($year >= 2000) {
+        return $year - 1911;
+    }
+
+    // Fallback - assume it's already ROC year
+    return $year;
+}
+
 function showUsage() {
     echo "Usage: php crawl-details.php <type> <source> [options]\n";
     echo "\n";
@@ -107,8 +123,11 @@ for ($i = 2; $i < $argc; $i++) {
             // Auto-determine dataType from crawler type
             $dataType = ($type === 'company') ? 'companies' : 'businesses';
             
+            // Convert to ROC year for consistent directory structure
+            $rocYear = convertToRocYear($year);
+            
             $dataDir = __DIR__ . "/data/gcis/{$dataType}";
-            $yearMonthDir = sprintf("%s/%03d-%02d", $dataDir, $year, $month);
+            $yearMonthDir = sprintf("%s/%03d-%02d", $dataDir, $rocYear, $month);
             $idsFile = "{$yearMonthDir}/ids_{$dataType}_{$year}_{$month}.txt";
             
             if (!file_exists($idsFile)) {
@@ -206,8 +225,12 @@ for ($i = 2; $i < $argc; $i++) {
 }
 
 if (empty($ids)) {
-    echo "Error: No IDs specified. Use --ids, --file, or --from-data\n";
-    showUsage();
+    echo "Error: No IDs found to process.\n";
+    echo "This could mean:\n";
+    echo "- No company/business registrations exist for the specified period\n";
+    echo "- The data file is empty\n";
+    echo "- Use --ids, --file with valid data, or try a different date\n";
+    exit(1);
 }
 
 // Apply offset and limit
