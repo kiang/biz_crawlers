@@ -78,6 +78,17 @@ class GCISCrawler extends BaseCrawler
         $uniqueIds = array_unique($allIds);
         $this->logger->info("Total unique company IDs found: " . count($uniqueIds));
 
+        // If we got 0 IDs, try cleaning inconsistent processed PDFs and retry once
+        if (empty($uniqueIds) && !isset($params['_retry'])) {
+            $this->logger->warning("Found 0 IDs, checking for inconsistent processed PDFs...");
+            $cleaned = $this->cleanInconsistentProcessedPdfs($rocYear, $month);
+            if ($cleaned > 0) {
+                $this->logger->info("Cleaned {$cleaned} inconsistent entries, retrying crawl...");
+                $params['_retry'] = true; // Prevent infinite recursion
+                return $this->crawl($params);
+            }
+        }
+
         return $uniqueIds;
     }
 
@@ -258,6 +269,19 @@ class GCISCrawler extends BaseCrawler
 
         $uniqueIds = array_unique($allIds);
         $this->logger->info("Total unique business IDs found: " . count($uniqueIds));
+
+        // If we got 0 IDs, try cleaning inconsistent processed PDFs and retry once
+        if (empty($uniqueIds) && !isset($this->businessRetryFlag)) {
+            $this->logger->warning("Found 0 business IDs, checking for inconsistent processed PDFs...");
+            $cleaned = $this->cleanInconsistentBusinessPdfs($rocYear, $month);
+            if ($cleaned > 0) {
+                $this->logger->info("Cleaned {$cleaned} inconsistent business entries, retrying crawl...");
+                $this->businessRetryFlag = true; // Prevent infinite recursion
+                $result = $this->crawlBusiness($year, $month);
+                unset($this->businessRetryFlag); // Clean up flag
+                return $result;
+            }
+        }
 
         return $uniqueIds;
     }
@@ -505,5 +529,76 @@ class GCISCrawler extends BaseCrawler
         file_put_contents($filepath, implode("\n", $ids));
         
         return $filepath;
+    }
+
+    private function cleanInconsistentProcessedPdfs(int $rocYear, int $month): int
+    {
+        $yearMonth = sprintf("%03d%02d", $rocYear, $month);
+        $dataDir = dirname(__DIR__) . '/data/gcis/pdfs';
+        $cleaned = 0;
+        $toRemove = [];
+
+        // Check for inconsistent entries for this specific year/month
+        foreach ($this->processedPdfs as $id => $info) {
+            $filename = $info['filename'];
+            
+            // Check if this is a company PDF for the target year/month
+            if (preg_match('/^' . preg_quote($yearMonth) . '/', $filename)) {
+                $txtFile = "{$dataDir}/{$id}.txt";
+                if (!file_exists($txtFile)) {
+                    $toRemove[] = $id;
+                    $this->logger->info("Found inconsistent entry: {$filename} (missing {$id}.txt)");
+                }
+            }
+        }
+
+        // Remove inconsistent entries
+        foreach ($toRemove as $id) {
+            unset($this->processedPdfs[$id]);
+            $cleaned++;
+        }
+
+        // Save updated tracking file if we cleaned anything
+        if ($cleaned > 0) {
+            $this->saveProcessedPdfs();
+        }
+
+        return $cleaned;
+    }
+
+    private function cleanInconsistentBusinessPdfs(int $rocYear, int $month): int
+    {
+        $yearMonth = sprintf("%03d%02d", $rocYear, $month);
+        $dataDir = dirname(__DIR__) . '/data/gcis/pdfs';
+        $cleaned = 0;
+        $toRemove = [];
+
+        // Check for inconsistent entries for this specific year/month
+        foreach ($this->processedPdfs as $id => $info) {
+            $filename = $info['filename'];
+            
+            // Check if this is a business PDF for the target year/month
+            // Business PDFs have format: {orgId}{typeId}{yearMonth}.pdf
+            if (preg_match('/' . preg_quote($yearMonth) . '\.pdf$/', $filename)) {
+                $txtFile = "{$dataDir}/{$id}.txt";
+                if (!file_exists($txtFile)) {
+                    $toRemove[] = $id;
+                    $this->logger->info("Found inconsistent business entry: {$filename} (missing {$id}.txt)");
+                }
+            }
+        }
+
+        // Remove inconsistent entries
+        foreach ($toRemove as $id) {
+            unset($this->processedPdfs[$id]);
+            $cleaned++;
+        }
+
+        // Save updated tracking file if we cleaned anything
+        if ($cleaned > 0) {
+            $this->saveProcessedPdfs();
+        }
+
+        return $cleaned;
     }
 }
