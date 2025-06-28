@@ -36,8 +36,8 @@ class GCISCrawler extends BaseCrawler
         // Load processed PDFs to avoid duplicates
         $this->loadProcessedPdfs();
 
-        // First get the organizations list
-        $this->fetchOrganizations();
+        // Initialize the organizations list
+        $this->initializeOrganizations();
 
         // Then crawl each organization and type combination
         $allIds = [];
@@ -81,32 +81,27 @@ class GCISCrawler extends BaseCrawler
         return $uniqueIds;
     }
 
-    private function fetchOrganizations(): void
+    private function initializeOrganizations(): void
     {
-        $this->logger->info("Fetching organizations list");
+        // Static list of GCIS organizations (fetched 2025-06-28)
+        $this->organizations = [
+            'AL' => '全國不分區',
+            'MO' => '經濟部商業發展署',
+            'CT' => '經濟部商業發展署(南投辦公區)',
+            'DO' => '臺北市商業處',
+            'NT' => '新北市政府經濟發展局',
+            'TY' => '桃園市政府經濟發展局',
+            'TC' => '臺中市政府經濟發展局',
+            'KC' => '高雄市政府經濟發展局',
+            'TN' => '臺南市政府經濟發展局',
+            'SI' => '科學園區管理區',
+            'CS' => '中部科學園區管理局',
+            'ST' => '南部科學園區管理局',
+            'EP' => '經濟部產業園區管理局',
+            'PT' => '農業部農業科技園區管理中心'
+        ];
 
-        $crawler = $this->fetch(self::BASE_URL);
-
-        // Convert from Big5 to UTF-8 if needed
-        $content = $crawler->html();
-        if (mb_detect_encoding($content, 'UTF-8', true) === false) {
-            $content = mb_convert_encoding($content, 'UTF-8', 'Big5');
-        }
-
-        // Parse organizations from select dropdown
-        $orgSelect = $crawler->filter('select[name="org"]');
-        if ($orgSelect->count() > 0) {
-            $orgSelect->filter('option')->each(function (Crawler $option) {
-                $value = $option->attr('value');
-                $text = trim($option->text());
-
-                if ($value && $text && $value !== '') {
-                    $this->organizations[$value] = $text;
-                }
-            });
-        }
-
-        $this->logger->info("Found " . count($this->organizations) . " organizations");
+        $this->logger->info("Initialized " . count($this->organizations) . " organizations");
     }
 
     private function crawlReportType(int $year, int $month, string $orgId, string $typeId): array
@@ -211,28 +206,36 @@ class GCISCrawler extends BaseCrawler
         // Load processed PDFs to avoid duplicates
         $this->loadProcessedPdfs();
 
-        // Get business organizations from different URL
-        $businessUrl = 'https://serv.gcis.nat.gov.tw/moeadsBF/bms/report.jsp';
-        $crawler = $this->fetch($businessUrl);
+        // Static list of business areas (fetched 2025-06-28)
+        $organizations = [
+            '376570000A' => '基隆市政府',
+            '376410000A' => '新北市政府',
+            '379100000G' => '台北市政府',
+            '376430000A' => '桃園市政府',
+            '376440000A' => '新竹縣政府',
+            '376580000A' => '新竹市政府',
+            '376450000A' => '苗栗縣政府',
+            '376460000A' => '台中縣政府',
+            '376590000A' => '台中市政府',
+            '376480000A' => '南投縣政府',
+            '376470000A' => '彰化縣政府',
+            '376490000A' => '雲林縣政府',
+            '376500000A' => '嘉義縣政府',
+            '376600000A' => '嘉義市政府',
+            '376510000A' => '台南縣政府',
+            '376610000A' => '台南市政府',
+            '376520000A' => '高雄縣政府',
+            '383100000G' => '高雄市政府',
+            '376530000A' => '屏東縣政府',
+            '376420000A' => '宜蘭縣政府',
+            '376550000A' => '花蓮縣政府',
+            '376540000A' => '台東縣政府',
+            '376560000A' => '澎湖縣政府',
+            '371010000A' => '金門縣政府',
+            '371030000A' => '連江縣政府'
+        ];
 
-        // Convert encoding if needed
-        $content = $crawler->html();
-        if (mb_detect_encoding($content, 'UTF-8', true) === false) {
-            $content = mb_convert_encoding($content, 'UTF-8', 'Big5');
-        }
-
-        $organizations = [];
-        $areaSelect = $crawler->filter('select[name="area"]');
-        if ($areaSelect->count() > 0) {
-            $areaSelect->filter('option')->each(function (Crawler $option) use (&$organizations) {
-                $value = $option->attr('value');
-                $text = trim($option->text());
-
-                if ($value && $text && $value !== '') {
-                    $organizations[$value] = $text;
-                }
-            });
-        }
+        $this->logger->info("Initialized " . count($organizations) . " business areas");
 
         $businessTypes = [
             'setup' => '設立',
