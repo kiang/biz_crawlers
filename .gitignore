@@ -20,3 +20,4 @@ Thumbs.db
 # Data repository (separate git repo)
 /data/
 /downloads/
+/raw/
