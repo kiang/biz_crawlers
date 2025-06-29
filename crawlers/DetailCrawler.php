@@ -489,6 +489,7 @@ class DetailCrawler extends BaseCrawler
                                 break;
                             case '公司名稱':
                             case '在中華民國境內負責人':
+                            case '在中華民國境內代表人':
                                 // Extract both Chinese and English company names
                                 $rawHtml = $doc->saveHTML($tds->item(1));
                                 $pos = strpos($rawHtml, '<span id="linkMoea">');
