@@ -370,6 +370,11 @@ class DetailCrawler extends BaseCrawler
 
     private function parseSearchResults(string $content, string $type): ?string
     {
+        // Check if content is empty
+        if (empty($content)) {
+            return null;
+        }
+
         // Handle UTF-8 encoding properly for Chinese characters
         $content = str_replace('<head>', '<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">', $content);
 
